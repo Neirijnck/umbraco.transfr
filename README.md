@@ -61,3 +61,19 @@ Start one site in the foreground:
 ```powershell
 ./tools/start-test-site.ps1 -Name A
 ```
+
+Every test site also gets the API user a remote needs (see below), with the client id and secret from `TransfrTestSite:ApiUser` in `appsettings.local.json`. With a site running, check that its API user can read but is refused everything the tool never does:
+
+```powershell
+./tools/probe-test-site-api-user.ps1 -Name B
+```
+
+## Setting up a remote
+
+Transfr reads and writes a remote through the remote's own Management API, signed in as an API user. Nothing is installed on the remote. Give that user the least it needs, so the remote itself refuses anything destructive even if the tool had a bug:
+
+1. A user group with the sections **Content** and **Media**, access to all languages, start nodes at the root, and only these document permissions: Read, Create, Update, Publish, Sort, and read/write property values. Not Delete, Unpublish or Move.
+2. An **API user** in that group.
+3. **Client credentials** for that user. The client id must start with `umbraco-back-office-`.
+
+The test sites create exactly this in code (`tests/Neirijnck.Transfr.TestSite/Seeding/TestApiUserSeeder.cs`). Without these permissions a delete, unpublish or move is answered with 403; with them, `DELETE /document/{id}` deletes a document permanently, without the recycle bin.

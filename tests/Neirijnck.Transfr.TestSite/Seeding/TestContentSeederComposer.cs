@@ -11,5 +11,6 @@ public sealed class TestContentSeederComposer : IComposer
         builder.Services.AddTransient<TestMediaBuilder>();
         builder.Services.AddTransient<TestDocumentBuilder>();
         builder.AddNotificationAsyncHandler<UmbracoApplicationStartedNotification, TestContentSeeder>();
+        builder.AddNotificationAsyncHandler<UmbracoApplicationStartedNotification, TestApiUserSeeder>();
     }
 }
