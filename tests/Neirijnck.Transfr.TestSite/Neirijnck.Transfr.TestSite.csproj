@@ -14,6 +14,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Neirijnck.Transfr\Neirijnck.Transfr.csproj" />
+    <!-- The package references Core with PrivateAssets="all" (Core ships inside the nupkg, not as a dependency), so a
+         project reference doesn't bring Core along. Reference it directly, as the installed package provides it. -->
+    <ProjectReference Include="..\..\src\Neirijnck.Transfr.Core\Neirijnck.Transfr.Core.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { PingData, PingErrors, PingResponses } from './types.gen';
+import type { GetRemotesData, GetRemotesErrors, GetRemotesResponses, GetStatusData, GetStatusErrors, GetStatusResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -19,10 +19,18 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 };
 
 export class TransfrService {
-    public static ping<ThrowOnError extends boolean = false>(options?: Options<PingData, ThrowOnError>): RequestResult<PingResponses, PingErrors, ThrowOnError> {
-        return (options?.client ?? client).get<PingResponses, PingErrors, ThrowOnError>({
+    public static getRemotes<ThrowOnError extends boolean = false>(options?: Options<GetRemotesData, ThrowOnError>): RequestResult<GetRemotesResponses, GetRemotesErrors, ThrowOnError> {
+        return (options?.client ?? client).get<GetRemotesResponses, GetRemotesErrors, ThrowOnError>({
             security: [{ scheme: 'bearer', type: 'http' }],
-            url: '/umbraco/management/api/v1/transfr/ping',
+            url: '/umbraco/management/api/v1/transfr/remotes',
+            ...options
+        });
+    }
+    
+    public static getStatus<ThrowOnError extends boolean = false>(options: Options<GetStatusData, ThrowOnError>): RequestResult<GetStatusResponses, GetStatusErrors, ThrowOnError> {
+        return (options.client ?? client).get<GetStatusResponses, GetStatusErrors, ThrowOnError>({
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/umbraco/management/api/v1/transfr/remotes/{alias}/status',
             ...options
         });
     }

@@ -42,7 +42,7 @@ Three throwaway Umbraco sites under `.sites/` (gitignored), each with its own SQ
 
 | Site | URL | What |
 |---|---|---|
-| A | https://localhost:44371/umbraco | Fresh install, seeded with test schema and content |
+| A | https://localhost:44371/umbraco | Fresh install, seeded with test schema and content. The local environment: has B and C as remotes |
 | B | https://localhost:44372/umbraco | Copy of A's database and media: same keys. Diverge it by editing in its backoffice |
 | C | https://localhost:44373/umbraco | Separate fresh install, seeded the same way: same aliases, different keys |
 
@@ -75,5 +75,27 @@ Transfr reads and writes a remote through the remote's own Management API, signe
 1. A user group with the sections **Content** and **Media**, access to all languages, start nodes at the root, and only these document permissions: Read, Create, Update, Publish, Sort, and read/write property values. Not Delete, Unpublish or Move.
 2. An **API user** in that group.
 3. **Client credentials** for that user. The client id must start with `umbraco-back-office-`.
+
+Then add the remote to the configuration of the environment you compare **from**, in a file or secret store that is never committed (it holds the client secret):
+
+```json
+{
+  "Transfr": {
+    "Remotes": [
+      {
+        "Alias": "staging",
+        "Name": "Staging",
+        "BaseUrl": "https://staging.example.com",
+        "ClientId": "umbraco-back-office-transfr",
+        "ClientSecret": "<the client secret>"
+      }
+    ]
+  }
+}
+```
+
+`BaseUrl` is the site root and must use https (plain http only for this machine). The Transfr section lists the remotes with a connection test. An environment without remotes shows no Transfr UI, and its Transfr endpoints answer 404. Only administrators can use Transfr, and the section has to be granted to their user group.
+
+The environment you compare from must be able to reach the remote: a developer machine can reach a hosted site, not the other way round.
 
 The test sites create exactly this in code (`tests/Neirijnck.Transfr.TestSite/Seeding/TestApiUserSeeder.cs`). Without these permissions a delete, unpublish or move is answered with 403; with them, `DELETE /document/{id}` deletes a document permanently, without the recycle bin.

@@ -9,7 +9,8 @@ $path = Get-TestSitePath $Name
 if (-not (Test-Path (Join-Path $path 'umbraco/Data'))) { throw "Site $Name does not exist yet. Run ./tools/new-test-sites.ps1 first." }
 
 Build-TestSite
-$env:ASPNETCORE_ENVIRONMENT = 'Development'
+$variables = Get-TestSiteEnvironment $Name
+foreach ($key in $variables.Keys) { Set-Item "Env:\$key" $variables[$key] }
 Push-Location $path
 try {
     Write-Host "Site $Name on $(Get-TestSiteUrl $Name)/umbraco"
@@ -17,5 +18,5 @@ try {
 }
 finally {
     Pop-Location
-    Remove-Item Env:\ASPNETCORE_ENVIRONMENT -ErrorAction SilentlyContinue
+    foreach ($key in $variables.Keys) { Remove-Item "Env:\$key" -ErrorAction SilentlyContinue }
 }

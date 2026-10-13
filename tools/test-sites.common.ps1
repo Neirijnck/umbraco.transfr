@@ -35,20 +35,41 @@ function Initialize-TestSiteFolder([string] $Name) {
     $path
 }
 
+# Site A is the local environment: it gets B and C as remotes, signed in with the API user every test site has.
+# B and C get no remotes, so they show what an environment without remotes looks like (no Transfr UI, 404s).
+# Passed as environment variables: the shared appsettings.local.json is copied into every site.
+function Get-TestSiteEnvironment([string] $Name) {
+    $variables = [ordered]@{ ASPNETCORE_ENVIRONMENT = 'Development' }
+    if ($Name -eq 'A') {
+        $local = Get-Content (Join-Path $script:TestSiteProject 'appsettings.local.json') -Raw | ConvertFrom-Json
+        $index = 0
+        foreach ($remote in 'B', 'C') {
+            $prefix = "Transfr__Remotes__$index"
+            $variables["${prefix}__Alias"] = $remote.ToLowerInvariant()
+            $variables["${prefix}__Name"] = "Test site $remote"
+            $variables["${prefix}__BaseUrl"] = Get-TestSiteUrl $remote
+            $variables["${prefix}__ClientId"] = $local.TransfrTestSite.ApiUser.ClientId
+            $variables["${prefix}__ClientSecret"] = $local.TransfrTestSite.ApiUser.ClientSecret
+            $index++
+        }
+    }
+    $variables
+}
+
 function Start-TestSite([string] $Name, [switch] $Seed) {
     $path = Get-TestSitePath $Name
     $logs = Join-Path $path 'logs'
     New-Item -ItemType Directory -Force $logs | Out-Null
-    $env:ASPNETCORE_ENVIRONMENT = 'Development'
-    $env:TransfrTestSite__SeedOnEmptyDatabase = if ($Seed) { 'true' } else { 'false' }
+    $variables = Get-TestSiteEnvironment $Name
+    $variables['TransfrTestSite__SeedOnEmptyDatabase'] = if ($Seed) { 'true' } else { 'false' }
+    foreach ($key in $variables.Keys) { Set-Item "Env:\$key" $variables[$key] }
     try {
         Start-Process dotnet -PassThru -WindowStyle Hidden -WorkingDirectory $path `
             -ArgumentList "`"$($script:TestSiteDll)`"", '--contentRoot', "`"$path`"", '--webroot', "`"$(Join-Path $path 'wwwroot')`"", '--urls', (Get-TestSiteUrl $Name) `
             -RedirectStandardOutput (Join-Path $logs 'stdout.log') -RedirectStandardError (Join-Path $logs 'stderr.log')
     }
     finally {
-        Remove-Item Env:\TransfrTestSite__SeedOnEmptyDatabase -ErrorAction SilentlyContinue
-        Remove-Item Env:\ASPNETCORE_ENVIRONMENT -ErrorAction SilentlyContinue
+        foreach ($key in $variables.Keys) { Remove-Item "Env:\$key" -ErrorAction SilentlyContinue }
     }
 }
 

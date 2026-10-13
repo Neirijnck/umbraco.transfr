@@ -19,6 +19,28 @@ public static class RemoteRequestPolicy
     ];
 
     /// <summary>
+    /// Throws unless the request goes to the remote's own scheme, host and port, with a listed method and path.
+    /// Every request to a remote passes through this check before it is sent.
+    /// </summary>
+    public static void EnsureAllowed(string method, Uri requestUri, Uri remoteBaseUrl)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+        ArgumentNullException.ThrowIfNull(requestUri);
+        ArgumentNullException.ThrowIfNull(remoteBaseUrl);
+
+        if (!requestUri.IsAbsoluteUri
+            || Uri.Compare(requestUri, remoteBaseUrl, UriComponents.SchemeAndServer, UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) != 0)
+        {
+            throw new RemoteRequestNotAllowedException($"{method} {requestUri} does not go to the remote {remoteBaseUrl}.");
+        }
+
+        if (!IsAllowed(method, requestUri.PathAndQuery))
+        {
+            throw new RemoteRequestNotAllowedException($"{method} {requestUri.AbsolutePath} is not on the allowlist.");
+        }
+    }
+
+    /// <summary>
     /// Whether a request may be sent. The query string is ignored; the path must match a template segment by segment
     /// (case-insensitive), with <c>{id}</c> matching exactly one GUID. Because every segment is compared exactly,
     /// dot segments, percent-encoding and unlisted methods can never match.

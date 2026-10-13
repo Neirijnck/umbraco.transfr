@@ -78,6 +78,34 @@ public sealed class RemoteRequestPolicyTests
         Assert.False(RemoteRequestPolicy.IsAllowed(method, path));
     }
 
+    [Fact]
+    public void EnsureAllowed_PassesAListedRequestToTheRemote()
+    {
+        var remote = new Uri("https://localhost:44372");
+
+        RemoteRequestPolicy.EnsureAllowed("GET", new Uri(remote, Api + "/tree/document/root?take=10"), remote);
+    }
+
+    [Theory]
+    [InlineData("https://other.example.com" + Api + "/tree/document/root")]
+    [InlineData("http://localhost:44372" + Api + "/tree/document/root")]
+    [InlineData("https://localhost:44373" + Api + "/tree/document/root")]
+    [InlineData("https://localhost:44372" + Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    public void EnsureAllowed_ThrowsForOtherHostsAndUnlistedPaths(string requestUri)
+    {
+        var remote = new Uri("https://localhost:44372");
+
+        Assert.Throws<RemoteRequestNotAllowedException>(() => RemoteRequestPolicy.EnsureAllowed("GET", new Uri(requestUri), remote));
+    }
+
+    [Fact]
+    public void EnsureAllowed_ThrowsForAnUnlistedMethodOnAListedPath()
+    {
+        var remote = new Uri("https://localhost:44372");
+
+        Assert.Throws<RemoteRequestNotAllowedException>(() => RemoteRequestPolicy.EnsureAllowed("DELETE", new Uri(remote, Api + "/tree/document/root"), remote));
+    }
+
     [Theory]
     [InlineData("/document/{id}", "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b", true)]
     [InlineData("/document/{id}", "/document/3F2A1C4E-5B6D-4E7F-8A9B-0C1D2E3F4A5B", true)]

@@ -4,14 +4,31 @@ export type ClientOptions = {
     baseUrl: 'https://localhost:44361' | (string & {});
 };
 
-export type PingData = {
+export type RemoteResponseModel = {
+    alias: string;
+    name: string;
+    baseUrl: string;
+    isValid: boolean;
+    errors: Array<string>;
+};
+
+export type RemoteStatusResponseModel = {
+    alias: string;
+    reachable: boolean;
+    serverStatus?: string | null;
+    authenticated: boolean;
+    rootDocuments?: number | null;
+    error?: string | null;
+};
+
+export type GetRemotesData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/umbraco/management/api/v1/transfr/ping';
+    url: '/umbraco/management/api/v1/transfr/remotes';
 };
 
-export type PingErrors = {
+export type GetRemotesErrors = {
     /**
      * The resource is protected and requires an authentication token
      */
@@ -22,11 +39,44 @@ export type PingErrors = {
     403: unknown;
 };
 
-export type PingResponses = {
+export type GetRemotesResponses = {
     /**
      * OK
      */
-    200: string;
+    200: Array<RemoteResponseModel>;
 };
 
-export type PingResponse = PingResponses[keyof PingResponses];
+export type GetRemotesResponse = GetRemotesResponses[keyof GetRemotesResponses];
+
+export type GetStatusData = {
+    body?: never;
+    path: {
+        alias: string;
+    };
+    query?: never;
+    url: '/umbraco/management/api/v1/transfr/remotes/{alias}/status';
+};
+
+export type GetStatusErrors = {
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+    /**
+     * The authenticated user does not have access to this resource
+     */
+    403: unknown;
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type GetStatusResponses = {
+    /**
+     * OK
+     */
+    200: RemoteStatusResponseModel;
+};
+
+export type GetStatusResponse = GetStatusResponses[keyof GetStatusResponses];
