@@ -1,0 +1,14 @@
+{
+  "id": "Neirijnck.Transfr",
+  "name": "Transfr",
+  "version": "0.1.0",
+  "allowTelemetry": true,
+  "extensions": [
+    {
+      "name": "Transfr Bundle",
+      "alias": "Transfr.Bundle",
+      "type": "bundle",
+      "js": "/App_Plugins/Transfr/transfr.js"
+    }
+  ]
+}

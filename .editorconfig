@@ -1,0 +1,170 @@
+# Transfr - editor and code-style conventions.
+# Compact by design: only rules this solution actually relies on.
+#
+# IMPORTANT: Directory.Build.props sets TreatWarningsAsErrors + EnforceCodeStyleInBuild,
+# so every rule below at `warning` severity FAILS THE BUILD. Severities are chosen with
+# that in mind: `warning` for conventions worth blocking on, `suggestion` for nudges.
+root = true
+
+##### All files #####
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = crlf
+charset = utf-8
+trim_trailing_whitespace = true
+# House convention: files end on their last code line, not on an empty row below it.
+insert_final_newline = false
+
+##### Data and build files #####
+[*.{json,jsonc,csproj,props,targets,slnx,config,yml,yaml}]
+indent_size = 2
+
+##### Markdown #####
+[*.md]
+# Two trailing spaces are a hard line break in Markdown, so trimming would change rendering.
+trim_trailing_whitespace = false
+
+##### Shell scripts stay LF (see .gitattributes) #####
+[*.sh]
+end_of_line = lf
+
+##### Razor, HTML and styles - 4 spaces, matching the C# side #####
+[*.{cshtml,razor,html,css,scss}]
+indent_size = 4
+
+##### JavaScript and TypeScript - 2 spaces, the prevailing convention in that ecosystem #####
+[*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}]
+indent_size = 2
+
+##### Prettier-formatted frontend files - exactly one final newline #####
+# Prettier always ends a file with one newline and cannot omit it, so these extensions follow Prettier
+# (CRLF via endOfLine "crlf" in .prettierrc). C#, Razor, HTML and JSON keep no final newline.
+[*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,css,scss,less}]
+insert_final_newline = true
+
+##### Generated code - analyzers skip these entirely #####
+# Code generators (e.g. ModelsBuilder) rewrite *.generated.cs, so cleaning them up is wasted work.
+[*.generated.cs]
+generated_code = true
+
+##### C# #####
+[*.cs]
+# UTF-8 with BOM for C#: the .NET templates emit it; staying consistent avoids churn in diffs.
+charset = utf-8-bom
+
+### Using directives
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+csharp_using_directive_placement = outside_namespace:warning
+
+### Namespaces
+# File-scoped namespaces everywhere: one less indentation level, and consistent from day one.
+csharp_style_namespace_declarations = file_scoped:warning
+
+### Braces and layout (Allman)
+csharp_prefer_braces = true:warning
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+
+### var
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = false:suggestion
+
+### Expression-bodied members
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_style_expression_bodied_accessors = true:suggestion
+csharp_style_expression_bodied_lambdas = true:suggestion
+
+### Modern C# - nudged, not enforced, so the build never blocks on taste
+csharp_style_prefer_primary_constructors = true:suggestion
+csharp_style_prefer_collection_expression = true:suggestion
+csharp_style_prefer_pattern_matching = true:suggestion
+csharp_style_null_propagation = true:suggestion
+csharp_style_coalesce_expression = true:suggestion
+csharp_style_inlined_variable_declaration = true:suggestion
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_prefer_conditional_expression_over_assignment = true:suggestion
+
+### Readonly where possible - cheap correctness win
+dotnet_style_readonly_field = true:warning
+
+### Analyzer severities we deliberately override
+# IDE0005 is silent by default; without this line unused usings never surface.
+# (It also needs GenerateDocumentationFile=true in Directory.Build.props.)
+dotnet_diagnostic.IDE0005.severity = warning
+# An unused parameter is legal C# and usually harmless - except when the method was supposed to use it.
+dotnet_diagnostic.IDE0060.severity = warning
+# File-scoped namespaces - auto-fixable, so blocking on it costs nothing.
+dotnet_diagnostic.IDE0161.severity = warning
+# Whole-file formatting. Left as a suggestion for now: promote to warning once the scaffolded
+# template code is known-clean, so `dotnet format` becomes the single source of truth.
+dotnet_diagnostic.IDE0055.severity = suggestion
+# Naming-rule violations surface as IDE1006. The dotnet_naming_rule severities below are NOT
+# enough on their own: without this line they never appear in a build.
+dotnet_diagnostic.IDE1006.severity = warning
+
+# A field is read with `this.`, which is what distinguishes it from a local now that the
+# underscore is gone. Only the field variant: property and method variants would touch every
+# call site rather than every field.
+dotnet_style_qualification_for_field = true:warning
+
+##### Naming conventions #####
+# Rules are evaluated in declaration order, so the constant and static-readonly rules must precede
+# the private-field rule - otherwise it would claim them.
+
+# Constants: PascalCase
+dotnet_naming_rule.constants_are_pascal_case.severity = warning
+dotnet_naming_rule.constants_are_pascal_case.symbols = constant_fields
+dotnet_naming_rule.constants_are_pascal_case.style = pascal_case
+dotnet_naming_symbols.constant_fields.applicable_kinds = field
+dotnet_naming_symbols.constant_fields.applicable_accessibilities = *
+dotnet_naming_symbols.constant_fields.required_modifiers = const
+
+# Private static readonly fields read as constants, so they keep PascalCase.
+dotnet_naming_rule.static_readonly_fields_are_pascal_case.severity = warning
+dotnet_naming_rule.static_readonly_fields_are_pascal_case.symbols = static_readonly_fields
+dotnet_naming_rule.static_readonly_fields_are_pascal_case.style = pascal_case
+dotnet_naming_symbols.static_readonly_fields.applicable_kinds = field
+dotnet_naming_symbols.static_readonly_fields.applicable_accessibilities = private, private_protected
+dotnet_naming_symbols.static_readonly_fields.required_modifiers = static, readonly
+
+# Private fields: camelCase, no underscore. `this.` (required above) tells a field from a local.
+dotnet_naming_rule.private_fields_are_camel_case.severity = warning
+dotnet_naming_rule.private_fields_are_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_are_camel_case.style = camel_case
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private, private_protected
+
+# Interfaces: IPascalCase
+dotnet_naming_rule.interfaces_start_with_i.severity = warning
+dotnet_naming_rule.interfaces_start_with_i.symbols = interfaces
+dotnet_naming_rule.interfaces_start_with_i.style = begins_with_i
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_symbols.interfaces.applicable_accessibilities = *
+
+# Everything else public-facing: PascalCase
+dotnet_naming_rule.members_are_pascal_case.severity = warning
+dotnet_naming_rule.members_are_pascal_case.symbols = types_and_members
+dotnet_naming_rule.members_are_pascal_case.style = pascal_case
+dotnet_naming_symbols.types_and_members.applicable_kinds = class, struct, enum, delegate, method, property, event
+dotnet_naming_symbols.types_and_members.applicable_accessibilities = *
+
+# Styles referenced above
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+dotnet_naming_style.camel_case.capitalization = camel_case
+dotnet_naming_style.begins_with_i.capitalization = pascal_case
+dotnet_naming_style.begins_with_i.required_prefix = I
+
+##### Scoped analyzer overrides - each with its reason #####
+
+# Test names read as sentences: Subject_Behaviour. CA1707 keeps underscores out of a public API
+# surface; a test project has no consumers.
+[tests/*.Tests/**.cs]
+dotnet_diagnostic.CA1707.severity = none

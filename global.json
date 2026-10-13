@@ -1,0 +1,10 @@
+{
+  // SDK floor: 10.0.100, the first .NET 10 feature band. latestFeature picks the highest installed band
+  // at or above it, so CI and a developer may compile on different bands; with TreatWarningsAsErrors a
+  // newer band's analyzers can turn a build red. Switch to latestPatch once CI runs on one fixed band.
+  // Tests run on VSTest (xUnit + Microsoft.NET.Test.Sdk), so there is no "test" runner entry here.
+  "sdk": {
+    "version": "10.0.100",
+    "rollForward": "latestFeature"
+  }
+}

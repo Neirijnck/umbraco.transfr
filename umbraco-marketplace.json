@@ -1,0 +1,15 @@
+{
+  "$schema": "https://marketplace.umbraco.com/umbraco-marketplace-schema.json",
+  "Title": "Transfr",
+  "Description": "Compare content trees between environments side by side, diff per property (blocks included), and copy nodes key-preserving with a mandatory dry run. Additive only: never deletes, unpublishes or moves.",
+  "Category": "Developer Tools",
+  "AuthorDetails": {
+    "Name": "Preben Neirijnck",
+    "Url": "https://github.com/Neirijnck"
+  },
+  "LicenseTypes": [ "Free" ],
+  "PackageType": "Package",
+  "DocumentationUrl": "https://github.com/Neirijnck/umbraco.transfr/blob/master/README.md",
+  "IssueTrackerUrl": "https://github.com/Neirijnck/umbraco.transfr/issues",
+  "Tags": [ "content", "compare", "diff", "sync", "deployment" ]
+}

@@ -1,0 +1,76 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+
+    <!-- Serve wwwroot at the site root, so the manifest is at /App_Plugins/Transfr/umbraco-package.json (not under _content/) -->
+    <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
+    <!-- Backoffice JS ships as-is -->
+    <CompressionEnabled>false</CompressionEnabled>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>Neirijnck.Transfr</PackageId>
+    <Product>Transfr</Product>
+    <Title>Transfr</Title>
+    <Description>Compare Umbraco content trees between environments side by side and copy nodes key-preserving, with a mandatory dry run.</Description>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Authors>Preben Neirijnck</Authors>
+    <Copyright>Preben Neirijnck</Copyright>
+    <PackageTags>umbraco umbraco-marketplace content compare diff sync transfer</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Neirijnck/umbraco.transfr</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Neirijnck/umbraco.transfr</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Umbraco.Cms.Api.Common" />
+    <PackageReference Include="Umbraco.Cms.Api.Management" />
+    <PackageReference Include="Umbraco.Cms.Web.Common" />
+    <PackageReference Include="Umbraco.Cms.Web.Website" />
+  </ItemGroup>
+
+  <!-- Core ships inside this package (lib/), not as a separate NuGet dependency -->
+  <ItemGroup>
+    <ProjectReference Include="..\Neirijnck.Transfr.Core\Neirijnck.Transfr.Core.csproj" PrivateAssets="all" />
+  </ItemGroup>
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeProjectReferencesInPackage</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+  <Target Name="IncludeProjectReferencesInPackage" DependsOnTargets="BuildOnlySettings;ResolveReferences">
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths->WithMetadataValue('ReferenceSourceTarget', 'ProjectReference'))" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <!-- Client sources are not content; only the built output in wwwroot ships -->
+    <Compile Remove="Client\**" />
+    <Content Remove="Client\**" />
+    <None Remove="Client\**" />
+    <EmbeddedResource Remove="Client\**" />
+    <None Include="Client\public\umbraco-package.json" Pack="false" />
+    <None Include="Client\src\**\*" Pack="false" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- Build the backoffice client with npm as part of dotnet build / pack -->
+  <PropertyGroup>
+    <ClientDir>$(MSBuildProjectDirectory)\Client</ClientDir>
+  </PropertyGroup>
+
+  <Target Name="RestoreClientPackages" BeforeTargets="BuildClient" Condition="'$(SkipClientBuild)' != 'true' And !Exists('$(ClientDir)\node_modules')">
+    <Exec WorkingDirectory="$(ClientDir)" Command="npm ci" />
+  </Target>
+
+  <Target Name="BuildClient" BeforeTargets="PrepareForBuild" Condition="'$(SkipClientBuild)' != 'true'">
+    <Exec WorkingDirectory="$(ClientDir)" Command="npm run build" />
+    <!-- wwwroot was globbed at evaluation, before npm ran: add the fresh output so a clean build includes it as static web assets -->
+    <ItemGroup>
+      <Content Include="wwwroot\App_Plugins\Transfr\**" Exclude="@(Content)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

@@ -1,0 +1,69 @@
+<Project>
+
+  <!--
+    Solution-wide build settings. Applies to every project in the repo.
+    Imported before each .csproj, so a project can still override any property locally.
+    TargetFramework is set per .csproj.
+  -->
+
+  <!--
+    Language level.
+    Nullable is enabled for greenfield code. A grown codebase that runs with Nullable disabled keeps
+    it that way: retrofitting annotations is not worth the churn.
+  -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!--
+    Build quality gate: every build (local and CI) fails on warnings.
+    NuGet audit advisories stay warnings, not errors: new CVEs get published independently of our
+    code and would otherwise break unrelated builds. They remain visible through the audit and are
+    handled deliberately (pin or suppress). The excluded codes are the vulnerable-package
+    severities: NU1901 = low, NU1902 = moderate, NU1903 = high, NU1904 = critical.
+  -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <!--
+    Analyzers.
+    EnforceCodeStyleInBuild makes the IDE* style rules from .editorconfig run during the build,
+    so they are covered by TreatWarningsAsErrors above.
+    GenerateDocumentationFile is required for IDE0005 (unnecessary usings) to report at all.
+    Setting its severity in .editorconfig is not enough. Turning the doc file on also activates
+    CS1591 (missing XML comment on a public member), which we do not want, hence the NoWarn.
+    No StyleCop.Analyzers: it overlaps with the rules in .editorconfig and conflicts with IDE0055.
+  -->
+  <PropertyGroup>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    NuGet.
+    Audit covers transitive packages too, not just direct references. The lock file makes restores
+    reproducible; CI restores in locked mode, which fails if the lock file and the props drift
+    apart. Commit packages.lock.json.
+  -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <!--
+    Deterministic output on build agents: normalises embedded file paths so two builds of the same
+    commit produce identical assemblies. Bitbucket Pipelines and GitHub Actions set CI=true; TeamCity
+    does not, so its configuration has to set env.CI = true by hand.
+  -->
+  <PropertyGroup>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+</Project>
