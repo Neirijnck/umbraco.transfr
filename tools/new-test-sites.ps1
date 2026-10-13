@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 # Creates the three throwaway test environments under .sites/:
 #   A - fresh install, seeded with test schema and content
 #   B - a copy of A's folder (database and media), so it shares A's keys; diverge it by editing in its backoffice

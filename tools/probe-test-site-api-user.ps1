@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 # Checks a running test site's Transfr API user: it can get a token and read, and the remote itself refuses the
 # operations the tool never performs (delete, recycle bin, unpublish, move) plus anything outside content and media.
 # Sends those forbidden requests on purpose, so it only runs against the local test sites.

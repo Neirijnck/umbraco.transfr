@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 # Shared helpers for the throwaway test sites under .sites/ (A, B, C).
 # All three run the same test site build, each with its own content root: own SQLite database, media and logs.
 
@@ -35,12 +36,14 @@ function Initialize-TestSiteFolder([string] $Name) {
     $path
 }
 
-# Site A is the local environment: it gets B and C as remotes, signed in with the API user every test site has.
-# B and C get no remotes, so they show what an environment without remotes looks like (no Transfr UI, 404s).
+# Site A is the local environment: remotes are connected at runtime in its Transfr section. With -ConfiguredRemotes it
+# also gets B and C as configured remotes, signed in with the API user every test site has.
+# B and C act as deployed remotes: no configured remotes and runtime remotes switched off, so no Transfr UI and 404s.
 # Passed as environment variables: the shared appsettings.local.json is copied into every site.
-function Get-TestSiteEnvironment([string] $Name) {
+function Get-TestSiteEnvironment([string] $Name, [switch] $ConfiguredRemotes) {
     $variables = [ordered]@{ ASPNETCORE_ENVIRONMENT = 'Development' }
-    if ($Name -eq 'A') {
+    $variables['Transfr__AllowRuntimeRemotes'] = if ($Name -eq 'A') { 'true' } else { 'false' }
+    if ($Name -eq 'A' -and $ConfiguredRemotes) {
         $local = Get-Content (Join-Path $script:TestSiteProject 'appsettings.local.json') -Raw | ConvertFrom-Json
         $index = 0
         foreach ($remote in 'B', 'C') {
@@ -56,11 +59,11 @@ function Get-TestSiteEnvironment([string] $Name) {
     $variables
 }
 
-function Start-TestSite([string] $Name, [switch] $Seed) {
+function Start-TestSite([string] $Name, [switch] $Seed, [switch] $ConfiguredRemotes) {
     $path = Get-TestSitePath $Name
     $logs = Join-Path $path 'logs'
     New-Item -ItemType Directory -Force $logs | Out-Null
-    $variables = Get-TestSiteEnvironment $Name
+    $variables = Get-TestSiteEnvironment $Name -ConfiguredRemotes:$ConfiguredRemotes
     $variables['TransfrTestSite__SeedOnEmptyDatabase'] = if ($Seed) { 'true' } else { 'false' }
     foreach ($key in $variables.Keys) { Set-Item "Env:\$key" $variables[$key] }
     try {

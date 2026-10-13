@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 # Reads document types and documents straight from each test site's SQLite database and compares keys by alias/name.
 # Expected after new-test-sites.ps1: A and B identical keys; C same aliases and names, different keys.
 # Run while the sites are stopped (or at least idle). Usage: ./tools/compare-test-site-keys.ps1
