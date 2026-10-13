@@ -21,7 +21,7 @@ Content compare for Umbraco 17: compare the content trees of two environments si
 
 Requirements: .NET 10 SDK, Node 22+.
 
-1. Copy `tests/Neirijnck.Transfr.TestSite/appsettings.local.example.json` to `appsettings.local.json` and set a password. The file is gitignored.
+1. Copy `tests/Neirijnck.Transfr.TestSite/appsettings.local.example.json` to `appsettings.local.json` and fill in the admin email and password for the unattended install. The file is gitignored.
 2. Run the test site.
 
 ```bash
