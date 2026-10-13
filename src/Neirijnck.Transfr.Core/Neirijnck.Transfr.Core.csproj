@@ -6,4 +6,8 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neirijnck.Transfr.Core.Tests" />
+  </ItemGroup>
+
 </Project>
