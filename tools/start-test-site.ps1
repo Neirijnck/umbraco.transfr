@@ -10,10 +10,12 @@ if (-not (Test-Path (Join-Path $path 'umbraco/Data'))) { throw "Site $Name does 
 
 Build-TestSite
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
+Push-Location $path
 try {
     Write-Host "Site $Name on $(Get-TestSiteUrl $Name)/umbraco"
-    dotnet $script:TestSiteDll --contentRoot $path --urls (Get-TestSiteUrl $Name)
+    dotnet $script:TestSiteDll --contentRoot $path --webroot (Join-Path $path 'wwwroot') --urls (Get-TestSiteUrl $Name)
 }
 finally {
+    Pop-Location
     Remove-Item Env:\ASPNETCORE_ENVIRONMENT -ErrorAction SilentlyContinue
 }

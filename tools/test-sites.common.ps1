@@ -23,7 +23,8 @@ function Build-TestSite {
 # A content root needs the configuration files; everything else (database, media, logs) is created by Umbraco.
 function Initialize-TestSiteFolder([string] $Name) {
     $path = Get-TestSitePath $Name
-    New-Item -ItemType Directory -Force $path | Out-Null
+    # Without an existing wwwroot under the content root, media ended up in the current directory: create it up front.
+    New-Item -ItemType Directory -Force (Join-Path $path 'wwwroot') | Out-Null
     $local = Join-Path $script:TestSiteProject 'appsettings.local.json'
     if (-not (Test-Path $local)) {
         throw "Missing $local. Copy appsettings.local.example.json and fill in the admin credentials."
@@ -41,8 +42,8 @@ function Start-TestSite([string] $Name, [switch] $Seed) {
     $env:ASPNETCORE_ENVIRONMENT = 'Development'
     $env:TransfrTestSite__SeedOnEmptyDatabase = if ($Seed) { 'true' } else { 'false' }
     try {
-        Start-Process dotnet -PassThru -WindowStyle Hidden `
-            -ArgumentList "`"$($script:TestSiteDll)`"", '--contentRoot', "`"$path`"", '--urls', (Get-TestSiteUrl $Name) `
+        Start-Process dotnet -PassThru -WindowStyle Hidden -WorkingDirectory $path `
+            -ArgumentList "`"$($script:TestSiteDll)`"", '--contentRoot', "`"$path`"", '--webroot', "`"$(Join-Path $path 'wwwroot')`"", '--urls', (Get-TestSiteUrl $Name) `
             -RedirectStandardOutput (Join-Path $logs 'stdout.log') -RedirectStandardError (Join-Path $logs 'stderr.log')
     }
     finally {

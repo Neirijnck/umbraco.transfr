@@ -12,12 +12,18 @@ foreach ($assembly in 'SQLitePCLRaw.core', 'SQLitePCLRaw.provider.e_sqlite3', 'S
 $env:PATH = "$(Join-Path $bin 'runtimes/win-x64/native');$env:PATH"
 [SQLitePCL.Batteries_V2]::Init()
 
-$documentType = 'a2cb7800-f571-4787-9638-bc48539a0efb'
-$document = 'c66ba18e-eaf3-4cff-8a22-41b16d66a972'
+# Umbraco object types (Constants.ObjectTypes). Types match by alias, everything else by name.
+$kinds = [ordered]@{
+    '30a2a501-1978-4ddb-a57b-f7efed43ba3c' = 'data type'
+    'a2cb7800-f571-4787-9638-bc48539a0efb' = 'document type'
+    '4ea4382b-2f5a-4c2b-9587-ae9b3cf3602e' = 'media type'
+    'c66ba18e-eaf3-4cff-8a22-41b16d66a972' = 'document'
+    'b796f64c-1f99-4ffb-b886-4bf4bc011a9c' = 'media'
+}
 $query = @"
 SELECT lower(n.nodeObjectType) AS kind, lower(n.uniqueId) AS key, coalesce(ct.alias, n.text) AS name
 FROM umbracoNode n LEFT JOIN cmsContentType ct ON ct.nodeId = n.id
-WHERE lower(n.nodeObjectType) IN ('$documentType', '$document') AND n.trashed = 0
+WHERE lower(n.nodeObjectType) IN ('$(@($kinds.Keys) -join "','")') AND n.trashed = 0
 "@
 
 $rows = @{}
@@ -31,7 +37,7 @@ foreach ($name in $script:SitePorts.Keys) {
         $command.CommandText = $query
         $reader = $command.ExecuteReader()
         $rows[$name] = while ($reader.Read()) {
-            [pscustomobject]@{ Kind = if ($reader['kind'] -eq $documentType) { 'type' } else { 'doc' }; Name = $reader['name']; Key = $reader['key'] }
+            [pscustomobject]@{ Kind = $kinds[[string]$reader['kind']]; Name = $reader['name']; Key = $reader['key'] }
         }
     }
     finally {
@@ -41,18 +47,21 @@ foreach ($name in $script:SitePorts.Keys) {
 
 $rows.Keys | Sort-Object | ForEach-Object {
     $r = $rows[$_]
-    Write-Host ("Site {0}: {1} document types, {2} documents" -f $_, @($r | Where-Object Kind -eq 'type').Count, @($r | Where-Object Kind -eq 'doc').Count)
+    $counts = foreach ($kind in $kinds.Values) { "{0} {1}" -f @($r | Where-Object Kind -eq $kind).Count, $kind }
+    Write-Host ("Site {0}: {1}" -f $_, ($counts -join ', '))
 }
 
 function Compare-Site([string] $Left, [string] $Right) {
     $byName = @{}
     foreach ($row in $rows[$Right]) { $byName["$($row.Kind):$($row.Name)"] = $row.Key }
-    $same = 0; $different = 0; $missing = 0
-    foreach ($row in $rows[$Left]) {
-        $other = $byName["$($row.Kind):$($row.Name)"]
-        if ($null -eq $other) { $missing++ } elseif ($other -eq $row.Key) { $same++ } else { $different++ }
+    foreach ($kind in $kinds.Values) {
+        $same = 0; $different = 0; $missing = 0
+        foreach ($row in $rows[$Left] | Where-Object Kind -eq $kind) {
+            $other = $byName["$($row.Kind):$($row.Name)"]
+            if ($null -eq $other) { $missing++ } elseif ($other -eq $row.Key) { $same++ } else { $different++ }
+        }
+        Write-Host ("{0} vs {1}, {2}: same key {3}, different key {4}, missing {5}" -f $Left, $Right, $kind, $same, $different, $missing)
     }
-    Write-Host ("{0} vs {1}: same key {2}, different key {3}, missing {4}" -f $Left, $Right, $same, $different, $missing)
 }
 
 if ($rows.ContainsKey('A') -and $rows.ContainsKey('B')) { Compare-Site 'A' 'B' }
