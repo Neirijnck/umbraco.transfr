@@ -35,3 +35,29 @@ To regenerate the TypeScript API client, keep the test site running and run:
 ```bash
 npm run generate-client --prefix src/Neirijnck.Transfr/Client
 ```
+
+## Test environments
+
+Three throwaway Umbraco sites under `.sites/` (gitignored), each with its own SQLite database, media and logs:
+
+| Site | URL | What |
+|---|---|---|
+| A | https://localhost:44371/umbraco | Fresh install, seeded with test schema and content |
+| B | https://localhost:44372/umbraco | Copy of A's database and media: same keys. Diverge it by editing in its backoffice |
+| C | https://localhost:44373/umbraco | Separate fresh install, seeded the same way: same aliases, different keys |
+
+Create them (requires `appsettings.local.json`, see above), then check how their keys relate:
+
+```powershell
+./tools/new-test-sites.ps1 -Force
+```
+
+```powershell
+./tools/compare-test-site-keys.ps1
+```
+
+Start one site in the foreground:
+
+```powershell
+./tools/start-test-site.ps1 -Name A
+```
