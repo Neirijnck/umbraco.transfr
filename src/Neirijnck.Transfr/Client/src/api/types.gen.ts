@@ -4,10 +4,27 @@ export type ClientOptions = {
     baseUrl: 'https://localhost:44361' | (string & {});
 };
 
+export type ConnectRemoteRequestModel = {
+    name: string;
+    baseUrl: string;
+    clientId: string;
+    clientSecret: string;
+};
+
+export type ProblemDetails = {
+    type?: string | null;
+    title?: string | null;
+    status?: number | null;
+    detail?: string | null;
+    instance?: string | null;
+    [key: string]: unknown;
+};
+
 export type RemoteResponseModel = {
     alias: string;
     name: string;
     baseUrl: string;
+    source: string;
     isValid: boolean;
     errors: Array<string>;
 };
@@ -19,6 +36,11 @@ export type RemoteStatusResponseModel = {
     authenticated: boolean;
     rootDocuments?: number | null;
     error?: string | null;
+};
+
+export type RemotesResponseModel = {
+    allowRuntimeRemotes: boolean;
+    remotes: Array<RemoteResponseModel>;
 };
 
 export type GetRemotesData = {
@@ -43,10 +65,78 @@ export type GetRemotesResponses = {
     /**
      * OK
      */
-    200: Array<RemoteResponseModel>;
+    200: RemotesResponseModel;
 };
 
 export type GetRemotesResponse = GetRemotesResponses[keyof GetRemotesResponses];
+
+export type ConnectData = {
+    body?: ConnectRemoteRequestModel;
+    path?: never;
+    query?: never;
+    url: '/umbraco/management/api/v1/transfr/remotes';
+};
+
+export type ConnectErrors = {
+    /**
+     * Bad Request
+     */
+    400: ProblemDetails;
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+    /**
+     * The authenticated user does not have access to this resource
+     */
+    403: unknown;
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type ConnectError = ConnectErrors[keyof ConnectErrors];
+
+export type ConnectResponses = {
+    /**
+     * OK
+     */
+    200: RemoteResponseModel;
+};
+
+export type ConnectResponse = ConnectResponses[keyof ConnectResponses];
+
+export type DisconnectData = {
+    body?: never;
+    path: {
+        alias: string;
+    };
+    query?: never;
+    url: '/umbraco/management/api/v1/transfr/remotes/{alias}';
+};
+
+export type DisconnectErrors = {
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+    /**
+     * The authenticated user does not have access to this resource
+     */
+    403: unknown;
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type DisconnectResponses = {
+    /**
+     * OK
+     */
+    200: unknown;
+};
 
 export type GetStatusData = {
     body?: never;

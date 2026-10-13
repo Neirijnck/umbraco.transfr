@@ -14,10 +14,10 @@ export const onInit: UmbEntryPointOnInit = async (host, extensionRegistry) => {
   }
   authContext.configureClient(client);
 
-  // The UI exists only where remotes are configured. Without remotes the server answers 404 (as it does for
-  // non-admins): that is the normal case on a deployed environment, so no error notification.
+  // The UI exists only where remotes are configured or may be connected at runtime. Otherwise the server answers 404
+  // (as it does for non-admins): the normal case on a deployed environment, so no error notification.
   const { data } = await tryExecute(host, TransfrService.getRemotes(), { disableNotifications: true });
-  if (data && data.length > 0) {
+  if (data && (data.allowRuntimeRemotes || data.remotes.length > 0)) {
     extensionRegistry.registerMany(section);
   }
 };

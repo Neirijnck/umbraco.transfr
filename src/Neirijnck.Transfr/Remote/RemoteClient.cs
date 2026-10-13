@@ -1,5 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Neirijnck.Transfr.Core.Remote;
 
@@ -57,10 +59,26 @@ public sealed class RemoteClient
         return new HttpRequestMessage(method, requestUri) { Content = content };
     }
 
-    private async Task<string> GetTokenAsync(RemoteDefinition remote, CancellationToken cancellationToken)
+    /// <summary>
+    /// Signs in with the remote's client credentials now, ignoring any cached token: proves the credentials work.
+    /// Throws <see cref="RemoteAuthenticationException"/> when the remote refuses them.
+    /// </summary>
+    public Task AuthenticateAsync(RemoteDefinition remote, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(remote);
+        return this.GetTokenAsync(remote, cancellationToken, useCache: false);
+    }
+
+    // Tokens are cached per set of credentials, not per alias: two users may each have a runtime remote with the same
+    // alias but different credentials.
+    private static string CacheKey(RemoteDefinition remote)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{remote.BaseUrl}\n{remote.ClientId}\n{remote.ClientSecret}")));
+
+    private async Task<string> GetTokenAsync(RemoteDefinition remote, CancellationToken cancellationToken, bool useCache = true)
     {
         var now = this.timeProvider.GetUtcNow();
-        if (this.tokens.TryGetValue(remote.Alias, out var cached) && cached.ExpiresAt - ExpiryMargin > now)
+        var cacheKey = CacheKey(remote);
+        if (useCache && this.tokens.TryGetValue(cacheKey, out var cached) && cached.ExpiresAt - ExpiryMargin > now)
         {
             return cached.Token;
         }
@@ -83,7 +101,7 @@ public sealed class RemoteClient
             ?? throw new RemoteAuthenticationException("The remote returned no access token.");
         var expiresIn = json.RootElement.TryGetProperty("expires_in", out var seconds) ? seconds.GetInt32() : 0;
 
-        this.tokens[remote.Alias] = (token, now.AddSeconds(expiresIn));
+        this.tokens[cacheKey] = (token, now.AddSeconds(expiresIn));
         return token;
     }
 }

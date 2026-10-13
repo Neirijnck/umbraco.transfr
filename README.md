@@ -19,7 +19,7 @@ Content compare for Umbraco 17: compare the content trees of two environments si
 
 ## Development
 
-Requirements: .NET 10 SDK, Node 22+.
+Requirements: .NET 10 SDK, Node 22+, and PowerShell 7 (`pwsh`) for the scripts in `tools/`. Windows PowerShell 5.1 refuses them.
 
 1. Copy `tests/Neirijnck.Transfr.TestSite/appsettings.local.example.json` to `appsettings.local.json` and fill in the admin email and password for the unattended install. The file is gitignored.
 2. Run the test site.
@@ -42,9 +42,9 @@ Three throwaway Umbraco sites under `.sites/` (gitignored), each with its own SQ
 
 | Site | URL | What |
 |---|---|---|
-| A | https://localhost:44371/umbraco | Fresh install, seeded with test schema and content. The local environment: has B and C as remotes |
-| B | https://localhost:44372/umbraco | Copy of A's database and media: same keys. Diverge it by editing in its backoffice |
-| C | https://localhost:44373/umbraco | Separate fresh install, seeded the same way: same aliases, different keys |
+| A | https://localhost:44371/umbraco | Fresh install, seeded with test schema and content. The local environment: connect B and C at runtime (the start script prints the client id and secret), or start it with `-ConfiguredRemotes` |
+| B | https://localhost:44372/umbraco | Copy of A's database and media: same keys. Diverge it by editing in its backoffice. Acts as a deployed remote: no Transfr UI |
+| C | https://localhost:44373/umbraco | Separate fresh install, seeded the same way: same aliases, different keys. Acts as a deployed remote: no Transfr UI |
 
 Create them (requires `appsettings.local.json`, see above), then check how their keys relate:
 
@@ -56,7 +56,13 @@ Create them (requires `appsettings.local.json`, see above), then check how their
 ./tools/compare-test-site-keys.ps1
 ```
 
-Start one site in the foreground:
+Start all three. The script builds once, starts the sites, and prints the client id and secret for connecting B or C from A. Ctrl+C stops all three:
+
+```powershell
+./tools/start-test-sites.ps1
+```
+
+Or start one site in the foreground. Add `-NoBuild` while other test sites are running, so a build doesn't rewrite what they serve:
 
 ```powershell
 ./tools/start-test-site.ps1 -Name A
@@ -76,7 +82,11 @@ Transfr reads and writes a remote through the remote's own Management API, signe
 2. An **API user** in that group.
 3. **Client credentials** for that user. The client id must start with `umbraco-back-office-`.
 
-Then add the remote to the configuration of the environment you compare **from**, in a file or secret store that is never committed (it holds the client secret):
+Then connect to the remote from the environment you compare **from**, in one of two ways.
+
+**At runtime.** In the Transfr section, fill in a name, the remote's address, the client id and the client secret, and choose **Connect**. Transfr signs in right away; if that fails, nothing is kept and the reason is shown. A connection is kept in server memory for your user only, never in the database or a file, until you disconnect it or the site restarts. Runtime connections are allowed when `Transfr:AllowRuntimeRemotes` is true; when it is not set, only in the `Development` and `Local` environments, so a deployed site doesn't offer them unless you switch it on.
+
+**In configuration**, for remotes you use every day: add them to a file or secret store that is never committed (it holds the client secret):
 
 ```json
 {
@@ -94,7 +104,7 @@ Then add the remote to the configuration of the environment you compare **from**
 }
 ```
 
-`BaseUrl` is the site root and must use https (plain http only for this machine). The Transfr section lists the remotes with a connection test. An environment without remotes shows no Transfr UI, and its Transfr endpoints answer 404. Only administrators can use Transfr, and the section has to be granted to their user group.
+`BaseUrl` is the site root and must use https (plain http only for this machine). The Transfr section lists the remotes with a connection test. An environment without configured remotes and without runtime connections shows no Transfr UI, and its Transfr endpoints answer 404. Only administrators can use Transfr. On first boot the package grants its section to the Administrators group (a package migration); other groups can be given the section by hand, but the endpoints still require administrator rights.
 
 The environment you compare from must be able to reach the remote: a developer machine can reach a hosted site, not the other way round.
 
