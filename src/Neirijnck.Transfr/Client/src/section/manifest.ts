@@ -1,3 +1,4 @@
+import { TRANSFR_COPY_PLAN_MODAL } from './copy-plan-modal.token.js';
 import { TRANSFR_NODE_DIFF_MODAL } from './node-diff-modal.token.js';
 
 export const TRANSFR_SECTION_ALIAS = 'Transfr.Section';
@@ -46,5 +47,11 @@ export const manifests: Array<UmbExtensionManifest> = [
     alias: TRANSFR_NODE_DIFF_MODAL.toString(),
     name: 'Transfr Node Diff',
     element: () => import('./node-diff-modal.element.js'),
+  },
+  {
+    type: 'modal',
+    alias: TRANSFR_COPY_PLAN_MODAL.toString(),
+    name: 'Transfr Copy Plan',
+    element: () => import('./copy-plan-modal.element.js'),
   },
 ];

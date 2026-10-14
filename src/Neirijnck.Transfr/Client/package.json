@@ -15,7 +15,7 @@
     "test:watch": "vitest",
     "format": "prettier --write \"**/*.{js,mjs,cjs,jsx,ts,tsx,css,scss,less}\"",
     "format:check": "prettier --check \"**/*.{js,mjs,cjs,jsx,ts,tsx,css,scss,less}\"",
-    "generate-client": "node scripts/generate-openapi.js https://localhost:44361/umbraco/swagger/transfr/swagger.json"
+    "generate-client": "node scripts/generate-openapi.js https://localhost:44371/umbraco/swagger/transfr/swagger.json"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

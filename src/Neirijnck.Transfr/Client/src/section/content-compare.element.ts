@@ -6,10 +6,21 @@ import { TransfrService } from '../api/index.js';
 import type { RemoteResponseModel, SeparateInstallResponseModel, TreeRowResponseModel } from '../api/index.js';
 import { umbOpenModal } from '@umbraco-cms/backoffice/modal';
 import { describeDifference, summarizeDifferences } from './content-summary.js';
+import { TRANSFR_COPY_PLAN_MODAL } from './copy-plan-modal.token.js';
 import { TRANSFR_NODE_DIFF_MODAL } from './node-diff-modal.token.js';
 import { problemMessage } from './problem.js';
 import { blockOf, describeSeparateInstall, passesBlockOn } from './schema-view.js';
 import type { RowBlock } from './schema-view.js';
+import {
+  coverForChildren,
+  describeSelection,
+  fromRequest,
+  setIncludeDescendants,
+  toRequest,
+  toggleSelected,
+  whyNotSelectable,
+} from './selection.js';
+import type { Selection } from './selection.js';
 import { countSubtree, describeCounts, formatDuration, positionsToReveal } from './subtree.js';
 import type { SubtreeCounts } from './subtree.js';
 import { rowView } from './tree-row-view.js';
@@ -66,6 +77,10 @@ export class TransfrContentCompareElement extends UmbLitElement {
   @state()
   private _separateInstall: Array<SeparateInstallResponseModel> = [];
 
+  // The nodes picked for a copy to the current remote, by key (a moved node is picked once, in its place here).
+  @state()
+  private _selection: Selection = new Map();
+
   override connectedCallback() {
     super.connectedCallback();
     void this.#loadRemotes();
@@ -83,6 +98,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
     this._expanded = new Set();
     this._subtree = undefined;
     this._separateInstall = [];
+    this._selection = new Map();
     if (alias) {
       void this.#loadLevel(ROOT);
     }
@@ -189,8 +205,8 @@ export class TransfrContentCompareElement extends UmbLitElement {
     };
   }
 
-  // A click anywhere on a row of a node on both sides opens its diff, except on the row's own buttons (expand, Show,
-  // compare below), which do their own thing. The name stays a button so the diff is reachable by keyboard too.
+  // A click anywhere on a row of a node on both sides opens its diff, except on the row's own controls (expand, select,
+  // Show, compare below), which do their own thing. The name stays a button so the diff is reachable by keyboard too.
   #rowClick(event: MouseEvent, row: TreeRowResponseModel) {
     if (!row.content) {
       return;
@@ -198,7 +214,9 @@ export class TransfrContentCompareElement extends UmbLitElement {
 
     const onControl = event
       .composedPath()
-      .some((target) => target instanceof HTMLElement && ['BUTTON', 'UUI-BUTTON', 'A'].includes(target.tagName));
+      .some(
+        (target) => target instanceof HTMLElement && ['BUTTON', 'UUI-BUTTON', 'INPUT', 'A'].includes(target.tagName),
+      );
     if (!onControl) {
       this.#openDiff(row);
     }
@@ -220,6 +238,26 @@ export class TransfrContentCompareElement extends UmbLitElement {
         name: row.local?.name ?? row.remote?.name ?? row.key,
       },
     }).catch(() => undefined);
+  }
+
+  // The dry run of copying the selection; it may add nodes to the selection, which come back when it closes. Closing
+  // it any other way (Escape) rejects the promise and keeps the selection as it was, which is not an error.
+  #openPlan() {
+    const alias = this._alias;
+    if (!alias || this._selection.size === 0) {
+      return;
+    }
+
+    const remote = this._remotes?.find((candidate) => candidate.alias === alias);
+    umbOpenModal(this, TRANSFR_COPY_PLAN_MODAL, {
+      data: { alias, remoteName: remote?.name ?? alias, selection: toRequest(this._selection) },
+    })
+      .then((value) => {
+        if (alias === this._alias) {
+          this._selection = fromRequest(value.selection);
+        }
+      })
+      .catch(() => undefined);
   }
 
   // The loaded level a node's row is in (the first one, if it shows up twice), or undefined when it isn't loaded yet.
@@ -302,6 +340,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
         </uui-button>
         ${this.#renderLegend()}
       </div>
+      ${this.#renderSelectionBar(remote?.name ?? 'the remote')}
       ${
         this._separateInstall.length > 0
           ? html`<div class="banner error" role="alert" data-test="separate-install">
@@ -327,10 +366,30 @@ export class TransfrContentCompareElement extends UmbLitElement {
           </div>
         </div>
         <div class="tree ${this._separateInstall.length > 0 ? 'refused' : ''}">
-          ${this.#renderLevel(ROOT, 0, remote?.name ?? 'the remote', undefined)}
+          ${this.#renderLevel(ROOT, 0, remote?.name ?? 'the remote', undefined, undefined)}
         </div>
       </div>
     `;
+  }
+
+  // What is picked for a copy, and the way to its dry run. Hidden until something is picked.
+  #renderSelectionBar(remoteName: string) {
+    if (this._selection.size === 0) {
+      return nothing;
+    }
+
+    return html`<div class="banner selection" role="status" data-test="selection">
+      <umb-icon name="icon-checkbox"></umb-icon>
+      <span>${describeSelection(this._selection)}.</span>
+      <uui-button look="secondary" label="Clear selection" @click=${() => (this._selection = new Map())}></uui-button>
+      <uui-button
+        look="primary"
+        label=${`Dry run: copy to ${remoteName}`}
+        ?disabled=${this._separateInstall.length > 0}
+        @click=${() => this.#openPlan()}
+        ><umb-icon name="icon-search"></umb-icon> Dry run: copy to ${remoteName}</uui-button
+      >
+    </div>`;
   }
 
   #renderSubtree(remoteName: string) {
@@ -387,7 +446,14 @@ export class TransfrContentCompareElement extends UmbLitElement {
   }
 
   // blockedParent: the name of a parent that can't be copied and isn't on the other side, so this level inherits it.
-  #renderLevel(parentKey: string, depth: number, remoteName: string, blockedParent: string | undefined): unknown {
+  // coveredBy: the name of a picked ancestor that brings this level along (with everything below it).
+  #renderLevel(
+    parentKey: string,
+    depth: number,
+    remoteName: string,
+    blockedParent: string | undefined,
+    coveredBy: string | undefined,
+  ): unknown {
     const level = this._levels[parentKey];
     if (!level || level.state === 'loading') {
       return html`<div class="message" style="--depth: ${depth}"><uui-loader-bar></uui-loader-bar></div>`;
@@ -411,7 +477,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
       ${repeat(
         level.rows,
         (row) => row.key,
-        (row) => this.#renderRow(parentKey, row, depth, remoteName, blockedParent),
+        (row) => this.#renderRow(parentKey, row, depth, remoteName, blockedParent, coveredBy),
       )}
     </ul>`;
   }
@@ -422,6 +488,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
     depth: number,
     remoteName: string,
     blockedParent: string | undefined,
+    coveredBy: string | undefined,
   ) {
     const position = `${parentKey}/${row.key}`;
     const expanded = this._expanded.has(position);
@@ -448,12 +515,18 @@ export class TransfrContentCompareElement extends UmbLitElement {
           @focusout=${() => (this._hoverKey = undefined)}
           @click=${(event: MouseEvent) => this.#rowClick(event, row)}
         >
-          ${this.#renderCell('local', parentKey, row, view.local, view.known, expanded, remoteName, block)}
-          ${this.#renderCell('remote', parentKey, row, view.remote, view.known, expanded, remoteName, block)}
+          ${this.#renderCell('local', parentKey, row, view.local, view.known, expanded, remoteName, block, coveredBy)}
+          ${this.#renderCell('remote', parentKey, row, view.remote, view.known, expanded, remoteName, block, coveredBy)}
         </div>
         ${
           expanded
-            ? this.#renderLevel(row.key, depth + 1, remoteName, block && passesBlockOn(row) ? name : undefined)
+            ? this.#renderLevel(
+                row.key,
+                depth + 1,
+                remoteName,
+                block && passesBlockOn(row) ? name : undefined,
+                coverForChildren(this._selection, row.key, name, coveredBy),
+              )
             : nothing
         }
       </li>
@@ -469,6 +542,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
     expanded: boolean,
     remoteName: string,
     block: RowBlock | undefined,
+    coveredBy: string | undefined,
   ) {
     const node = side === 'local' ? row.local : row.remote;
     const name = row.local?.name ?? row.remote?.name ?? row.key;
@@ -493,7 +567,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
 
     return html`
       <div class="cell ${side} ${kind} ${changed ? 'changed' : ''}">
-        ${expander}
+        ${expander} ${side === 'local' ? this.#renderPick(row, kind, name, block, coveredBy) : nothing}
         ${
           node && kind !== 'missing' && kind !== 'elsewhere'
             ? html`
@@ -513,6 +587,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
                       </button>`
                     : html`<span class="name">${node.name}</span>`
                 }
+                ${side === 'local' && node.hasChildren && !coveredBy ? this.#renderBelow(row.key, name) : nothing}
                 <span class="chips">${this.#renderChips(side, row, kind, known, remoteName, block)}</span>
               `
             : this.#renderPlaceholder(side, row, kind, remoteName)
@@ -533,6 +608,58 @@ export class TransfrContentCompareElement extends UmbLitElement {
         }
       </div>
     `;
+  }
+
+  // A checkbox where the node is here in this place; a disabled one says why it can't be picked. A node a picked
+  // ancestor brings along is shown ticked and disabled: it goes along, and is left out by changing that ancestor's
+  // choice. A placeholder for a node that isn't here (or lives elsewhere here) gets an empty slot, so names stay in line.
+  #renderPick(
+    row: TreeRowResponseModel,
+    kind: SideKind,
+    name: string,
+    block: RowBlock | undefined,
+    coveredBy: string | undefined,
+  ) {
+    if (kind === 'missing' || kind === 'elsewhere') {
+      return html`<span class="pick"></span>`;
+    }
+
+    const why = whyNotSelectable(row, block, this._separateInstall.length > 0);
+    const along =
+      why === undefined && coveredBy !== undefined ? `Comes along with everything below ${coveredBy}` : undefined;
+    const title = why ?? along ?? `Select ${name} for a copy`;
+    // A native checkbox: uui-checkbox always shows its label next to the box (no way to keep it for screen readers
+    // only), which doesn't fit a tree row.
+    return html`<input
+      type="checkbox"
+      class="pick"
+      aria-label=${why ? `${name} can't be selected: ${why}` : along ? `${name}: ${along}` : title}
+      title=${title}
+      .checked=${along !== undefined || (why === undefined && this._selection.has(row.key))}
+      ?disabled=${why !== undefined || along !== undefined}
+      @change=${() => (this._selection = toggleSelected(this._selection, row.key))}
+    />`;
+  }
+
+  // For a picked node with children: whether everything below it comes along. Shown only once it is picked.
+  #renderBelow(key: string, name: string) {
+    if (!this._selection.has(key)) {
+      return nothing;
+    }
+
+    const include = this._selection.get(key) === true;
+    return html`<uui-button
+      class="below"
+      compact
+      look=${include ? 'primary' : 'outline'}
+      aria-pressed=${include ? 'true' : 'false'}
+      label=${`Include everything below ${name}`}
+      title=${include ? 'Everything below this node comes along. Click for this node only.' : 'Only this node. Click to bring everything below it along.'}
+      @click=${() => (this._selection = setIncludeDescendants(this._selection, key, !include))}
+      ><span class="chip"
+        ><umb-icon name="icon-tree"></umb-icon>${include ? 'With everything below' : 'This node only'}</span
+      ></uui-button
+    >`;
   }
 
   // Chips only for differences: identical nodes stay quiet.
@@ -846,6 +973,32 @@ export class TransfrContentCompareElement extends UmbLitElement {
       .expander {
         flex-shrink: 0;
         width: var(--uui-size-8);
+      }
+
+      .pick {
+        flex-shrink: 0;
+        width: var(--uui-size-5);
+        height: var(--uui-size-5);
+        margin: 0;
+        accent-color: var(--uui-color-selected);
+        cursor: pointer;
+      }
+
+      .pick:disabled {
+        cursor: not-allowed;
+      }
+
+      .pick:focus-visible {
+        outline: 2px solid var(--uui-color-focus);
+        outline-offset: 2px;
+      }
+
+      .below {
+        flex-shrink: 0;
+      }
+
+      .banner.selection {
+        border-left-color: var(--uui-color-focus, var(--uui-color-selected));
       }
 
       .doc {

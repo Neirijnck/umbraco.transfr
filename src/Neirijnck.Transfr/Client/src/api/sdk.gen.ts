@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CompareSubtreeData, CompareSubtreeErrors, CompareSubtreeResponses, CompareTreeLevelData, CompareTreeLevelErrors, CompareTreeLevelResponses, ConnectData, ConnectErrors, ConnectResponses, DiffDocumentData, DiffDocumentErrors, DiffDocumentResponses, DisconnectData, DisconnectErrors, DisconnectResponses, GetRemotesData, GetRemotesErrors, GetRemotesResponses, GetStatusData, GetStatusErrors, GetStatusResponses } from './types.gen';
+import type { CompareSubtreeData, CompareSubtreeErrors, CompareSubtreeResponses, CompareTreeLevelData, CompareTreeLevelErrors, CompareTreeLevelResponses, ConnectData, ConnectErrors, ConnectResponses, DiffDocumentData, DiffDocumentErrors, DiffDocumentResponses, DisconnectData, DisconnectErrors, DisconnectResponses, GetRemotesData, GetRemotesErrors, GetRemotesResponses, GetStatusData, GetStatusErrors, GetStatusResponses, PlanCopyData, PlanCopyErrors, PlanCopyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -52,6 +52,18 @@ export class TransfrService {
             security: [{ scheme: 'bearer', type: 'http' }],
             url: '/umbraco/management/api/v1/transfr/remotes/{alias}/document/{key}/diff',
             ...options
+        });
+    }
+    
+    public static planCopy<ThrowOnError extends boolean = false>(options: Options<PlanCopyData, ThrowOnError>): RequestResult<PlanCopyResponses, PlanCopyErrors, ThrowOnError> {
+        return (options.client ?? client).post<PlanCopyResponses, PlanCopyErrors, ThrowOnError>({
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/umbraco/management/api/v1/transfr/remotes/{alias}/plan',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
         });
     }
     

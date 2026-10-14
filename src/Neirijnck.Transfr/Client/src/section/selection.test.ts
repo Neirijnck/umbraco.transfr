@@ -1,0 +1,91 @@
+import { describe, expect, it } from 'vitest';
+import type { TreeRowResponseModel } from '../api/index.js';
+import {
+  addToSelection,
+  coverForChildren,
+  describeSelection,
+  fromRequest,
+  setIncludeDescendants,
+  toRequest,
+  toggleSelected,
+  whyNotSelectable,
+} from './selection.js';
+
+const row = (status: string): TreeRowResponseModel => ({ key: 'r', status, orderDiffers: false });
+
+describe('selection', () => {
+  it('picks a node on its own and drops it again', () => {
+    const picked = toggleSelected(new Map(), 'a');
+    expect([...picked]).toEqual([['a', false]]);
+    expect(toggleSelected(picked, 'a').size).toBe(0);
+  });
+
+  it('includes everything below a picked node only', () => {
+    const picked = setIncludeDescendants(toggleSelected(new Map(), 'a'), 'a', true);
+    expect(picked.get('a')).toBe(true);
+    expect(setIncludeDescendants(picked, 'b', true).has('b')).toBe(false);
+  });
+
+  it('adds nodes without changing the choice for one already picked', () => {
+    const picked = addToSelection(new Map([['a', true]]), ['a', 'b']);
+    expect([...picked]).toEqual([
+      ['a', true],
+      ['b', false],
+    ]);
+  });
+
+  it('covers the children of a node picked with everything below it, and their children', () => {
+    const picked = new Map([
+      ['home', true],
+      ['news', false],
+    ]);
+    expect(coverForChildren(picked, 'home', 'Home', undefined)).toBe('Home');
+    expect(coverForChildren(picked, 'news', 'News', undefined)).toBeUndefined();
+    expect(coverForChildren(picked, 'about', 'About', 'Home')).toBe('Home');
+    expect(coverForChildren(new Map(), 'home', 'Home', undefined)).toBeUndefined();
+  });
+
+  it('round-trips through the request, in the order picked', () => {
+    const picked = new Map([
+      ['b', true],
+      ['a', false],
+    ]);
+    expect(toRequest(picked)).toEqual([
+      { key: 'b', includeDescendants: true },
+      { key: 'a', includeDescendants: false },
+    ]);
+    expect([...fromRequest(toRequest(picked))]).toEqual([...picked]);
+  });
+
+  it.each([
+    [new Map([['a', false]]), '1 node selected'],
+    [new Map([['a', true]]), '1 node selected, 1 with everything below it'],
+    [
+      new Map([
+        ['a', true],
+        ['b', true],
+        ['c', false],
+      ]),
+      '3 nodes selected, 2 with everything below them',
+    ],
+  ])('describes %o', (selection, expected) => {
+    expect(describeSelection(selection)).toBe(expected);
+  });
+});
+
+describe('whyNotSelectable', () => {
+  it.each(['InBoth', 'OnlyLocal', 'ElsewhereOnRemote'])('lets a node here in this place be picked (%s)', (status) => {
+    expect(whyNotSelectable(row(status), undefined, false)).toBeUndefined();
+  });
+
+  it('refuses a node that is only on the remote or lives elsewhere here', () => {
+    expect(whyNotSelectable(row('OnlyRemote'), undefined, false)).toBe('This node is not here.');
+    expect(whyNotSelectable(row('ElsewhereLocally'), undefined, false)).toMatch(/select it there/);
+  });
+
+  it('refuses a blocked node with the block reason, and everything on a refused remote', () => {
+    const block = { reason: 'Document type "X" doesn\'t exist on B', details: [], inherited: false };
+    expect(whyNotSelectable(row('OnlyLocal'), block, false)).toBe(block.reason);
+    expect(whyNotSelectable(row('InBoth'), undefined, true)).toMatch(/installed separately/);
+  });
+});
