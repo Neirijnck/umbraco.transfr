@@ -2,7 +2,7 @@
 
 /// <summary>
 /// One row of a compared tree level. Status is one of InBoth, OnlyLocal, OnlyRemote, ElsewhereOnRemote,
-/// ElsewhereLocally.
+/// ElsewhereLocally. Content is set for a node found on both sides.
 /// </summary>
 public sealed record TreeRowResponseModel(
     Guid Key,
@@ -10,4 +10,5 @@ public sealed record TreeRowResponseModel(
     TreeSideResponseModel? Local,
     TreeSideResponseModel? Remote,
     Guid? OtherParentKey,
-    Guid? SameNameKey);
+    Guid? SameNameKey,
+    TreeRowContentResponseModel? Content);

@@ -14,6 +14,7 @@ public sealed class RemoteRequestPolicyTests
         "GET " + Api + "/tree/document/root",
         "GET " + Api + "/tree/document/children",
         "GET " + Api + "/item/document",
+        "GET " + Api + "/document/{id}",
     ];
 
     private static readonly string[] AllowedMethods = ["GET", "POST", "PUT"];
@@ -55,6 +56,7 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("GET", Api + "/tree/document/root?skip=0&take=100")]
     [InlineData("get", Api + "/TREE/document/children?parentId=3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/item/document/")]
+    [InlineData("GET", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     public void IsAllowed_AcceptsListedRequests(string method, string path)
     {
         Assert.True(RemoteRequestPolicy.IsAllowed(method, path));
@@ -73,6 +75,12 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("GET", "/umbraco/management/api/v2/tree/document/root")]
     [InlineData("GET", "/tree/document/root")]
     [InlineData("GET", "")]
+    [InlineData("DELETE", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/unpublish")]
+    [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/move-to-recycle-bin")]
+    [InlineData("GET", Api + "/document/root")]
+    [InlineData("GET", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/audit-log")]
     public void IsAllowed_RejectsEverythingElse(string method, string path)
     {
         Assert.False(RemoteRequestPolicy.IsAllowed(method, path));
@@ -90,7 +98,8 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("https://other.example.com" + Api + "/tree/document/root")]
     [InlineData("http://localhost:44372" + Api + "/tree/document/root")]
     [InlineData("https://localhost:44373" + Api + "/tree/document/root")]
-    [InlineData("https://localhost:44372" + Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("https://localhost:44372" + Api + "/media/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("https://other.example.com" + Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     public void EnsureAllowed_ThrowsForOtherHostsAndUnlistedPaths(string requestUri)
     {
         var remote = new Uri("https://localhost:44372");

@@ -38,7 +38,7 @@ public sealed class RemoteTreeReader
             var path = parentKey is null
                 ? $"{RemoteRequestPolicy.ApiBase}/tree/document/root?skip={nodes.Count}&take={PageSize}"
                 : $"{RemoteRequestPolicy.ApiBase}/tree/document/children?parentId={parentKey}&skip={nodes.Count}&take={PageSize}";
-            var json = await this.GetStringAsync(remote, path, cancellationToken);
+            var json = await this.client.GetStringAsync(remote, path, cancellationToken);
             requests++;
 
             var (pageTotal, page) = ManagementApiTreeParser.ParseTreePage(json, nodes.Count, preferredCulture);
@@ -69,7 +69,7 @@ public sealed class RemoteTreeReader
         foreach (var batch in keys.Chunk(LocateBatchSize))
         {
             var query = string.Join("&", batch.Select(key => $"id={key}"));
-            var json = await this.GetStringAsync(remote, $"{RemoteRequestPolicy.ApiBase}/item/document?{query}", cancellationToken);
+            var json = await this.client.GetStringAsync(remote, $"{RemoteRequestPolicy.ApiBase}/item/document?{query}", cancellationToken);
             requests++;
 
             foreach (var (key, parent) in ManagementApiTreeParser.ParseItemParents(json))
@@ -79,16 +79,5 @@ public sealed class RemoteTreeReader
         }
 
         return (parents, requests);
-    }
-
-    private async Task<string> GetStringAsync(RemoteDefinition remote, string path, CancellationToken cancellationToken)
-    {
-        using var response = await this.client.SendAsync(remote, HttpMethod.Get, path, cancellationToken: cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new HttpRequestException($"The remote answered {(int)response.StatusCode} for {path.Split('?')[0]}.", null, response.StatusCode);
-        }
-
-        return await response.Content.ReadAsStringAsync(cancellationToken);
     }
 }

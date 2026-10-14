@@ -51,6 +51,21 @@ public sealed class RemoteClient
         return await this.httpClientFactory.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
     }
 
+    /// <summary>
+    /// GETs a path and returns the body. Throws <see cref="HttpRequestException"/>, with the status code, for anything
+    /// but a success.
+    /// </summary>
+    public async Task<string> GetStringAsync(RemoteDefinition remote, string pathAndQuery, CancellationToken cancellationToken)
+    {
+        using var response = await this.SendAsync(remote, HttpMethod.Get, pathAndQuery, cancellationToken: cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException($"The remote answered {(int)response.StatusCode} for {pathAndQuery.Split('?')[0]}.", null, response.StatusCode);
+        }
+
+        return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+
     private static HttpRequestMessage CreateRequest(RemoteDefinition remote, HttpMethod method, string pathAndQuery, HttpContent? content)
     {
         var baseUrl = new Uri(remote.BaseUrl);

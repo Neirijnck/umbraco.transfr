@@ -16,6 +16,7 @@ public static class RemoteRequestPolicy
         new("GET", ApiBase + "/tree/document/root"),
         new("GET", ApiBase + "/tree/document/children"),
         new("GET", ApiBase + "/item/document"),
+        new("GET", ApiBase + "/document/{id}"),
     ];
 
     /// <summary>

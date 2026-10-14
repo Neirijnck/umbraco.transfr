@@ -46,7 +46,8 @@ public partial class CompareController : TransfrApiControllerBase
         try
         {
             var comparison = await this.treeCompare.CompareLevelAsync(remote, parentKey, cancellationToken);
-            return this.Ok(new TreeLevelResponseModel(comparison.Rows.Select(ToResponse).ToList(), comparison.RemoteRequests));
+            var rows = comparison.Rows.Select(row => ToResponse(row, comparison.Contents.GetValueOrDefault(row.Key))).ToList();
+            return this.Ok(new TreeLevelResponseModel(rows, comparison.RemoteRequests));
         }
         catch (RemoteAuthenticationException exception)
         {
@@ -63,12 +64,26 @@ public partial class CompareController : TransfrApiControllerBase
     [LoggerMessage(Level = LogLevel.Warning, Message = "Comparing tree level {ParentKey} with remote {Alias} failed")]
     private static partial void LogCompareFailed(ILogger logger, Guid? parentKey, string alias, Exception exception);
 
-    private static TreeRowResponseModel ToResponse(TreeCompareRow row)
+    private static TreeRowResponseModel ToResponse(TreeCompareRow row, NodeContentComparison? content)
         => new(
             row.Key,
             row.Status.ToString(),
             row.Local is null ? null : new TreeSideResponseModel(row.Local.Name, row.Local.HasChildren),
             row.Remote is null ? null : new TreeSideResponseModel(row.Remote.Name, row.Remote.HasChildren),
             row.OtherParentKey,
-            row.SameNameKey);
+            row.SameNameKey,
+            content is null ? null : ToResponse(content));
+
+    private static TreeRowContentResponseModel ToResponse(NodeContentComparison content)
+    {
+        if (content.Comparison is null)
+        {
+            return new TreeRowContentResponseModel("Failed", [], content.Error);
+        }
+
+        var differences = content.Comparison.Differences
+            .Select(difference => new ContentDifferenceResponseModel(difference.Kind.ToString(), difference.Alias, difference.Culture, difference.Segment))
+            .ToList();
+        return new TreeRowContentResponseModel(content.Comparison.IsIdentical ? "Identical" : "Different", differences, null);
+    }
 }
