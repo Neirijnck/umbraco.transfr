@@ -83,6 +83,23 @@ public sealed class ManagementApiTreeParserTests
     }
 
     [Fact]
+    public void ParseItemParents_ReadsMediaItemsToo()
+    {
+        // item/media as measured on an Umbraco 17.7.0 test site: Blue and Red asked for with a third, unknown key,
+        // which the API left out.
+        const string json = """
+            [{"isTrashed":false,"parent":{"id":"a3f1f94d-30a7-433b-8fc9-3ba35f61f72b"},"hasChildren":false,"mediaType":{"id":"cc07b313-0843-4aa8-bbda-871c8da728c8","icon":"icon-picture","collection":null},"variants":[{"name":"Blue","culture":null}],"id":"a28038ed-b11a-41f6-a990-bed021cac2fb","flags":[]},
+             {"isTrashed":false,"parent":{"id":"1b3682a5-7914-4a6c-9f2e-ace6937d4169"},"hasChildren":false,"mediaType":{"id":"cc07b313-0843-4aa8-bbda-871c8da728c8","icon":"icon-picture","collection":null},"variants":[{"name":"Red","culture":null}],"id":"d7055f49-d608-40a3-94d4-d4b5cbd0facb","flags":[]}]
+            """;
+
+        var parents = ManagementApiTreeParser.ParseItemParents(json);
+
+        Assert.Equal(new Guid("a3f1f94d-30a7-433b-8fc9-3ba35f61f72b"), parents[new Guid("a28038ed-b11a-41f6-a990-bed021cac2fb")]);
+        Assert.Equal(new Guid("1b3682a5-7914-4a6c-9f2e-ace6937d4169"), parents[new Guid("d7055f49-d608-40a3-94d4-d4b5cbd0facb")]);
+        Assert.Equal(2, parents.Count);
+    }
+
+    [Fact]
     public void ParseTreePage_GivesANodeWithoutANameAPlaceholder()
     {
         const string json = """{"total":1,"items":[{"id":"924c1efa-9b3d-4575-9106-166e6ed39ad1","hasChildren":false,"variants":[{"name":"","culture":null}]}]}""";

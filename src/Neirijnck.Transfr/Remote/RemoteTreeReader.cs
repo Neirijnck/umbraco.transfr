@@ -4,8 +4,8 @@ using Neirijnck.Transfr.Core.Tree;
 namespace Neirijnck.Transfr.Remote;
 
 /// <summary>
-/// Reads a remote's document tree through its Management API. Every method reports how many requests it sent, so
-/// the cost of a compare stays visible.
+/// Reads a remote's document tree, and locates its documents and media items, through its Management API. Every
+/// method reports how many requests it sent, so the cost of a compare stays visible.
 /// </summary>
 public sealed class RemoteTreeReader
 {
@@ -59,8 +59,25 @@ public sealed class RemoteTreeReader
     /// Where these documents are on the remote: key to parent key (null = the root). Unknown and trashed keys are
     /// left out.
     /// </summary>
-    public async Task<(IReadOnlyDictionary<Guid, Guid?> Parents, int Requests)> LocateAsync(
+    public Task<(IReadOnlyDictionary<Guid, Guid?> Parents, int Requests)> LocateAsync(
         RemoteDefinition remote,
+        IReadOnlyCollection<Guid> keys,
+        CancellationToken cancellationToken)
+        => this.LocateItemsAsync(remote, "item/document", keys, cancellationToken);
+
+    /// <summary>
+    /// Where these media items are on the remote: key to parent folder key (null = the root). Unknown and trashed keys
+    /// are left out.
+    /// </summary>
+    public Task<(IReadOnlyDictionary<Guid, Guid?> Parents, int Requests)> LocateMediaAsync(
+        RemoteDefinition remote,
+        IReadOnlyCollection<Guid> keys,
+        CancellationToken cancellationToken)
+        => this.LocateItemsAsync(remote, "item/media", keys, cancellationToken);
+
+    private async Task<(IReadOnlyDictionary<Guid, Guid?> Parents, int Requests)> LocateItemsAsync(
+        RemoteDefinition remote,
+        string itemPath,
         IReadOnlyCollection<Guid> keys,
         CancellationToken cancellationToken)
     {
@@ -69,7 +86,7 @@ public sealed class RemoteTreeReader
         foreach (var batch in keys.Chunk(LocateBatchSize))
         {
             var query = string.Join("&", batch.Select(key => $"id={key}"));
-            var json = await this.client.GetStringAsync(remote, $"{RemoteRequestPolicy.ApiBase}/item/document?{query}", cancellationToken);
+            var json = await this.client.GetStringAsync(remote, $"{RemoteRequestPolicy.ApiBase}/{itemPath}?{query}", cancellationToken);
             requests++;
 
             foreach (var (key, parent) in ManagementApiTreeParser.ParseItemParents(json))

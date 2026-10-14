@@ -1,4 +1,5 @@
-﻿using Neirijnck.Transfr.Core.Tree;
+﻿using Neirijnck.Transfr.Core.Planning;
+using Neirijnck.Transfr.Core.Tree;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.Entities;
 using Umbraco.Cms.Core.Services;
@@ -70,17 +71,58 @@ public sealed class LocalTreeReader
 
         return this.entityService.GetAll(UmbracoObjectTypes.Document, keys.ToArray())
             .Where(entity => !entity.Trashed)
-            .ToDictionary(entity => entity.Key, entity => this.ParentKeyOf(entity));
+            .ToDictionary(entity => entity.Key, entity => this.ParentKeyOf(entity, UmbracoObjectTypes.Document));
     }
 
-    private Guid? ParentKeyOf(IEntitySlim entity)
+    /// <summary>
+    /// These documents here with their parent, name and depth. Unknown and trashed keys are left out.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, LocalNode> Describe(IReadOnlyCollection<Guid> keys, string? preferredCulture)
+    {
+        if (keys.Count == 0)
+        {
+            return new Dictionary<Guid, LocalNode>();
+        }
+
+        return this.entityService.GetAll(UmbracoObjectTypes.Document, keys.ToArray())
+            .Where(entity => !entity.Trashed)
+            .ToDictionary(
+                entity => entity.Key,
+                entity => new LocalNode(entity.Key, this.ParentKeyOf(entity, UmbracoObjectTypes.Document), NameOf(entity, preferredCulture), entity.Level));
+    }
+
+    /// <summary>
+    /// These media items here and every folder above them, by key. Unknown and trashed items are left out.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, LocalMediaItem> MediaChains(IReadOnlyCollection<Guid> keys)
+    {
+        var items = new Dictionary<Guid, LocalMediaItem>();
+        var wanted = keys.ToArray();
+        while (wanted.Length > 0)
+        {
+            var found = this.entityService.GetAll(UmbracoObjectTypes.Media, wanted)
+                .Where(entity => !entity.Trashed)
+                .Select(entity => new LocalMediaItem(entity.Key, this.ParentKeyOf(entity, UmbracoObjectTypes.Media), NameOf(entity, null)))
+                .ToList();
+            foreach (var item in found)
+            {
+                items[item.Key] = item;
+            }
+
+            wanted = found.Select(item => item.ParentKey).OfType<Guid>().Where(parent => !items.ContainsKey(parent)).Distinct().ToArray();
+        }
+
+        return items;
+    }
+
+    private Guid? ParentKeyOf(IEntitySlim entity, UmbracoObjectTypes objectType)
     {
         if (entity.ParentId == UmbracoConstants.System.Root)
         {
             return null;
         }
 
-        var parent = this.idKeyMap.GetKeyForId(entity.ParentId, UmbracoObjectTypes.Document);
+        var parent = this.idKeyMap.GetKeyForId(entity.ParentId, objectType);
         return parent.Success ? parent.Result : null;
     }
 

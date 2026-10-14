@@ -37,9 +37,10 @@ public static class ManagementApiTreeParser
     }
 
     /// <summary>
-    /// Where the requested documents are: key to parent key (null = the root). The API leaves out unknown keys, so a
-    /// key missing from the result doesn't exist. A trashed document counts as missing: the recycle bin is not a
-    /// place in the tree.
+    /// Where the requested documents (<c>item/document</c>) or media items (<c>item/media</c>, the same shape) are: key to
+    /// parent key (null = the root). The API leaves out unknown keys, so a key missing from the result doesn't exist. A
+    /// trashed item counts as missing: the recycle bin is not a place in the tree (measured: it is listed with
+    /// <c>isTrashed</c> true and the recycle bin as its parent).
     /// </summary>
     public static IReadOnlyDictionary<Guid, Guid?> ParseItemParents(string json)
     {

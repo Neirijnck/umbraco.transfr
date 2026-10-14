@@ -14,6 +14,7 @@ public sealed class RemoteRequestPolicyTests
         "GET " + Api + "/tree/document/root",
         "GET " + Api + "/tree/document/children",
         "GET " + Api + "/item/document",
+        "GET " + Api + "/item/media",
         "GET " + Api + "/document/{id}",
         "GET " + Api + "/document-type/{id}",
         "GET " + Api + "/data-type/{id}",
@@ -59,6 +60,7 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("GET", Api + "/tree/document/root?skip=0&take=100")]
     [InlineData("get", Api + "/TREE/document/children?parentId=3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/item/document/")]
+    [InlineData("GET", Api + "/item/media?id=3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/document-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/data-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]

@@ -1,0 +1,22 @@
+﻿using Neirijnck.Transfr.Compare;
+using Neirijnck.Transfr.Core.Planning;
+using Neirijnck.Transfr.Local;
+
+namespace Neirijnck.Transfr.Planning;
+
+/// <summary>
+/// A dry run with what the view needs to explain it.
+/// </summary>
+/// <param name="Rows">The plan, media first.</param>
+/// <param name="Names">Names behind the keys in the notes: documents and media here, namesakes on the target, document types.</param>
+/// <param name="SelectableHere">Documents named in a note that exist here, so they can be added to the selection.</param>
+/// <param name="DocumentTypes">The name and property labels of each row's document type here.</param>
+/// <param name="SeparateInstall">Evidence that the remote was installed separately (empty when there is none).</param>
+/// <param name="RemoteRequests">Requests it cost on the remote.</param>
+public sealed record CopyPlanResult(
+    IReadOnlyList<PlanRow> Rows,
+    IReadOnlyDictionary<Guid, string> Names,
+    IReadOnlySet<Guid> SelectableHere,
+    IReadOnlyDictionary<Guid, ContentTypeNames> DocumentTypes,
+    IReadOnlyList<SeparateInstallEvidence> SeparateInstall,
+    int RemoteRequests);

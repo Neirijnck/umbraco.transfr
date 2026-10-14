@@ -33,13 +33,9 @@ public sealed class LocalSchemaNames
         var types = new Dictionary<Guid, ContentTypeNames>();
         foreach (var key in typeKeys)
         {
-            var type = this.contentTypeService.Get(key);
-            if (type is not null)
+            if (this.TypeNames(key) is { } names)
             {
-                var labels = type.CompositionPropertyTypes
-                    .GroupBy(property => property.Alias, StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(group => group.Key, group => group.First().Name, StringComparer.OrdinalIgnoreCase);
-                types[key] = new ContentTypeNames(type.Name ?? type.Alias, labels);
+                types[key] = names;
             }
         }
 
@@ -56,6 +52,24 @@ public sealed class LocalSchemaNames
         }
 
         return new SchemaNames(types, templates);
+    }
+
+    /// <summary>
+    /// A document or element type's name and its property labels (compositions included), or null when this
+    /// environment doesn't have it.
+    /// </summary>
+    public ContentTypeNames? TypeNames(Guid key)
+    {
+        var type = this.contentTypeService.Get(key);
+        if (type is null)
+        {
+            return null;
+        }
+
+        var labels = type.CompositionPropertyTypes
+            .GroupBy(property => property.Alias, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Name, StringComparer.OrdinalIgnoreCase);
+        return new ContentTypeNames(type.Name ?? type.Alias, labels);
     }
 
     /// <summary>

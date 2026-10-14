@@ -6,6 +6,7 @@ using Neirijnck.Transfr.Core.Remote;
 using Neirijnck.Transfr.Core.Schema;
 using Neirijnck.Transfr.Core.Tree;
 using Neirijnck.Transfr.Models;
+using Neirijnck.Transfr.Planning;
 using Neirijnck.Transfr.Remote;
 using Umbraco.Cms.Core.Security;
 
@@ -16,6 +17,7 @@ public partial class CompareController : TransfrApiControllerBase
     private readonly RemoteRegistry registry;
     private readonly TreeCompareService treeCompare;
     private readonly DocumentDiffService documentDiff;
+    private readonly CopyPlanService copyPlan;
     private readonly IBackOfficeSecurityAccessor backOfficeSecurityAccessor;
     private readonly ILogger<CompareController> logger;
 
@@ -23,12 +25,14 @@ public partial class CompareController : TransfrApiControllerBase
         RemoteRegistry registry,
         TreeCompareService treeCompare,
         DocumentDiffService documentDiff,
+        CopyPlanService copyPlan,
         IBackOfficeSecurityAccessor backOfficeSecurityAccessor,
         ILogger<CompareController> logger)
     {
         this.registry = registry;
         this.treeCompare = treeCompare;
         this.documentDiff = documentDiff;
+        this.copyPlan = copyPlan;
         this.backOfficeSecurityAccessor = backOfficeSecurityAccessor;
         this.logger = logger;
     }
@@ -80,6 +84,37 @@ public partial class CompareController : TransfrApiControllerBase
                 : this.Problem(title: "The document is not on both sides", statusCode: StatusCodes.Status404NotFound);
         });
 
+    /// <summary>
+    /// The dry run of copying the selected documents (each with or without everything below it) from here to the
+    /// remote. It only reads, on both sides. 400 when the selection is empty, unknown here or too large.
+    /// </summary>
+    [HttpPost("remotes/{alias}/plan")]
+    [ProducesResponseType<CopyPlanResponseModel>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> PlanCopy(string alias, CopyPlanRequestModel request, CancellationToken cancellationToken)
+    {
+        if (request.Selection is not { Count: > 0 })
+        {
+            return this.Problem(title: "Select at least one document", statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var selection = request.Selection.Select(choice => new PlanSelection(choice.Key, choice.IncludeDescendants)).ToList();
+        return await this.CompareWithAsync(alias, null, async remote =>
+        {
+            try
+            {
+                return this.Ok(PlanResponses.From(await this.copyPlan.PlanAsync(remote, selection, cancellationToken)));
+            }
+            catch (PlanSelectionException exception)
+            {
+                var keys = exception.Keys.Count == 0 ? string.Empty : " " + string.Join(", ", exception.Keys);
+                return this.Problem(title: "The selection can't be planned", detail: exception.Message + keys, statusCode: StatusCodes.Status400BadRequest);
+            }
+        });
+    }
+
     // Finds the user's remote (404 when unknown) and turns a refused sign-in or a failed remote read into a 502.
     private async Task<IActionResult> CompareWithAsync(string alias, Guid? parentKey, Func<RemoteDefinition, Task<IActionResult>> compare)
     {
@@ -105,13 +140,13 @@ public partial class CompareController : TransfrApiControllerBase
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Comparing below {ParentKey} with remote {Alias} failed")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Comparing below {ParentKey} with (or planning a copy to) remote {Alias} failed")]
     private static partial void LogCompareFailed(ILogger logger, Guid? parentKey, string alias, Exception exception);
 
     private static List<SeparateInstallResponseModel> SeparateInstallOf(IEnumerable<TreeLevelComparison> levels)
         => levels.SelectMany(level => level.Schema.SeparateInstall)
             .DistinctBy(evidence => evidence.LocalKey)
-            .Select(evidence => new SeparateInstallResponseModel(evidence.Alias, evidence.Name, evidence.LocalKey, evidence.RemoteKey))
+            .Select(ResponseMapping.From)
             .ToList();
 
     private static List<TreeRowResponseModel> RowsOf(TreeLevelComparison comparison)
@@ -146,17 +181,7 @@ public partial class CompareController : TransfrApiControllerBase
             row.SameNameKey,
             content is null ? null : ToResponse(content),
             row.OrderDiffers,
-            schema is null || schema.IsOk
-                ? null
-                : schema.Problems
-                    .Select(problem => new SchemaProblemResponseModel(
-                        problem.Kind.ToString(),
-                        problem.Key,
-                        problem.Name,
-                        problem.IsElement,
-                        problem.Reason.ToString(),
-                        problem.Details))
-                    .ToList());
+            schema is null || schema.IsOk ? null : schema.Problems.Select(ResponseMapping.From).ToList());
 
     private static TreeRowContentResponseModel ToResponse(NodeContentComparison content)
     {
@@ -165,9 +190,7 @@ public partial class CompareController : TransfrApiControllerBase
             return new TreeRowContentResponseModel("Failed", [], content.Error);
         }
 
-        var differences = content.Comparison.Differences
-            .Select(difference => new ContentDifferenceResponseModel(difference.Kind.ToString(), difference.Alias, difference.Culture, difference.Segment))
-            .ToList();
+        var differences = content.Comparison.Differences.Select(ResponseMapping.From).ToList();
         return new TreeRowContentResponseModel(content.Comparison.IsIdentical ? "Identical" : "Different", differences, null);
     }
 }
