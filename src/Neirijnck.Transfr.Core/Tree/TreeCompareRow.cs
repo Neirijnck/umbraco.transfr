@@ -12,10 +12,14 @@
 /// For a node on one side only: the key of a node with the same name under this parent on the other side. Two
 /// separately created nodes that look alike; copying would duplicate them, so this blocks a copy later.
 /// </param>
+/// <param name="OrderDiffers">
+/// For a node under this parent on both sides: it sits in another place among its siblings on the remote.
+/// </param>
 public sealed record TreeCompareRow(
     Guid Key,
     TreeNode? Local,
     TreeNode? Remote,
     TreeCompareStatus Status,
     Guid? OtherParentKey = null,
-    Guid? SameNameKey = null);
+    Guid? SameNameKey = null,
+    bool OrderDiffers = false);
