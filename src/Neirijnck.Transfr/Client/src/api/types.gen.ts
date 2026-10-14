@@ -43,6 +43,25 @@ export type RemotesResponseModel = {
     remotes: Array<RemoteResponseModel>;
 };
 
+export type TreeLevelResponseModel = {
+    rows: Array<TreeRowResponseModel>;
+    remoteRequests: number;
+};
+
+export type TreeRowResponseModel = {
+    key: string;
+    status: string;
+    local?: TreeSideResponseModel | null;
+    remote?: TreeSideResponseModel | null;
+    otherParentKey?: string | null;
+    sameNameKey?: string | null;
+};
+
+export type TreeSideResponseModel = {
+    name: string;
+    hasChildren: boolean;
+};
+
 export type GetRemotesData = {
     body?: never;
     path?: never;
@@ -170,3 +189,44 @@ export type GetStatusResponses = {
 };
 
 export type GetStatusResponse = GetStatusResponses[keyof GetStatusResponses];
+
+export type CompareTreeLevelData = {
+    body?: never;
+    path: {
+        alias: string;
+    };
+    query?: {
+        parentKey?: string;
+    };
+    url: '/umbraco/management/api/v1/transfr/remotes/{alias}/tree';
+};
+
+export type CompareTreeLevelErrors = {
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+    /**
+     * The authenticated user does not have access to this resource
+     */
+    403: unknown;
+    /**
+     * Not Found
+     */
+    404: unknown;
+    /**
+     * Bad Gateway
+     */
+    502: ProblemDetails;
+};
+
+export type CompareTreeLevelError = CompareTreeLevelErrors[keyof CompareTreeLevelErrors];
+
+export type CompareTreeLevelResponses = {
+    /**
+     * OK
+     */
+    200: TreeLevelResponseModel;
+};
+
+export type CompareTreeLevelResponse = CompareTreeLevelResponses[keyof CompareTreeLevelResponses];
