@@ -1,0 +1,1 @@
+{"id":"ad9f0cf2-bda2-45d5-9ea1-a63cfc873fd3","isDeletable":true,"canIgnoreStartNodes":true,"name":"Image Media Picker","editorAlias":"Umbraco.MediaPicker3","editorUiAlias":"Umb.PropertyEditorUi.MediaPicker","values":[{"alias":"filter","value":"cc07b313-0843-4aa8-bbda-871c8da728c8"},{"alias":"multiple","value":false},{"alias":"validationLimit","value":{"min":0,"max":1}}]}

@@ -11,6 +11,8 @@ public sealed class ManagementApiTreeParserTests
     private static readonly Guid About = new("924c1efa-9b3d-4575-9106-166e6ed39ad1");
     private static readonly Guid News = new("a008f488-fde5-4f76-9e99-dd37e65c4800");
     private static readonly Guid VariantPage = new("444a58ce-840f-46d2-8b8a-2fcdfc0916e4");
+    private static readonly Guid TestPage = new("e245cdaa-4176-4551-a6c4-ff3ead958d31");
+    private static readonly Guid VariantPageType = new("4219aaf3-5468-437f-a14f-a2980f650693");
 
     private static string Fixture(string name) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name));
 
@@ -20,7 +22,7 @@ public sealed class ManagementApiTreeParserTests
         var (total, nodes) = ManagementApiTreeParser.ParseTreePage(Fixture("tree-root.json"), 0, "en-US");
 
         Assert.Equal(1, total);
-        Assert.Equal(new TreeNode(Home, "Home", 0, true), Assert.Single(nodes));
+        Assert.Equal(new TreeNode(Home, "Home", 0, true, TestPage, "icon-document"), Assert.Single(nodes));
     }
 
     [Fact]
@@ -31,7 +33,8 @@ public sealed class ManagementApiTreeParserTests
         Assert.Equal(5, total);
         Assert.Equal(["About", "News", "Draft Page", "Features", "Variant Page"], nodes.Select(n => n.Name));
         Assert.Equal([0, 1, 2, 3, 4], nodes.Select(n => n.SortIndex));
-        Assert.Equal(new TreeNode(News, "News", 1, true), nodes[1]);
+        Assert.Equal(new TreeNode(News, "News", 1, true, TestPage, "icon-document"), nodes[1]);
+        Assert.Equal((VariantPageType, "icon-globe"), (nodes[4].DocumentTypeKey, nodes[4].DocumentTypeIcon));
     }
 
     [Fact]

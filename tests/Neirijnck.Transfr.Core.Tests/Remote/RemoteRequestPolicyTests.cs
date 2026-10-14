@@ -15,6 +15,9 @@ public sealed class RemoteRequestPolicyTests
         "GET " + Api + "/tree/document/children",
         "GET " + Api + "/item/document",
         "GET " + Api + "/document/{id}",
+        "GET " + Api + "/document-type/{id}",
+        "GET " + Api + "/data-type/{id}",
+        "GET " + Api + "/item/document-type/search",
     ];
 
     private static readonly string[] AllowedMethods = ["GET", "POST", "PUT"];
@@ -57,6 +60,9 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("get", Api + "/TREE/document/children?parentId=3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/item/document/")]
     [InlineData("GET", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("GET", Api + "/document-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("GET", Api + "/data-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("GET", Api + "/item/document-type/search?query=Home")]
     public void IsAllowed_AcceptsListedRequests(string method, string path)
     {
         Assert.True(RemoteRequestPolicy.IsAllowed(method, path));
@@ -81,6 +87,12 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/move-to-recycle-bin")]
     [InlineData("GET", Api + "/document/root")]
     [InlineData("GET", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/audit-log")]
+    [InlineData("DELETE", Api + "/document-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("PUT", Api + "/document-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("POST", Api + "/document-type")]
+    [InlineData("DELETE", Api + "/data-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("PUT", Api + "/data-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("GET", Api + "/tree/document-type/root")]
     public void IsAllowed_RejectsEverythingElse(string method, string path)
     {
         Assert.False(RemoteRequestPolicy.IsAllowed(method, path));

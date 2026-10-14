@@ -28,7 +28,9 @@ public static class ManagementApiTreeParser
                 item.GetProperty("id").GetGuid(),
                 NameOf(item, preferredCulture),
                 skip + index,
-                item.GetProperty("hasChildren").GetBoolean()))
+                item.GetProperty("hasChildren").GetBoolean(),
+                DocumentTypeKeyOf(item),
+                DocumentTypeIconOf(item)))
             .ToList();
 
         return (root.GetProperty("total").GetInt32(), nodes);
@@ -52,6 +54,22 @@ public static class ManagementApiTreeParser
                     ? parent.GetProperty("id").GetGuid()
                     : (Guid?)null);
     }
+
+    private static Guid? DocumentTypeKeyOf(JsonElement item)
+        => item.TryGetProperty("documentType", out var type)
+            && type.ValueKind == JsonValueKind.Object
+            && type.TryGetProperty("id", out var id)
+            && id.TryGetGuid(out var key)
+                ? key
+                : null;
+
+    private static string? DocumentTypeIconOf(JsonElement item)
+        => item.TryGetProperty("documentType", out var type)
+            && type.ValueKind == JsonValueKind.Object
+            && type.TryGetProperty("icon", out var icon)
+            && icon.ValueKind == JsonValueKind.String
+                ? icon.GetString()
+                : null;
 
     // Invariant nodes have one variant with culture null; variant nodes one per culture.
     private static string NameOf(JsonElement item, string? preferredCulture)
