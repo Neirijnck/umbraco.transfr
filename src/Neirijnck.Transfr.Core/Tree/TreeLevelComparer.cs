@@ -82,52 +82,10 @@ public static class TreeLevelComparer
     private static List<TreeCompareRow> MarkOrderDifferences(List<TreeCompareRow> rows)
     {
         var inBoth = rows.Where(row => row.Status == TreeCompareStatus.InBoth).ToList();
-        var inOrder = LongestIncreasingRun(inBoth.Select(row => row.Remote!.SortIndex).ToList());
+        var inOrder = OrderRun.LongestIncreasing(inBoth.Select(row => row.Remote!.SortIndex).ToList());
         var moved = inBoth.Where((_, index) => !inOrder.Contains(index)).Select(row => row.Key).ToHashSet();
 
         return rows.Select(row => moved.Contains(row.Key) ? row with { OrderDiffers = true } : row).ToList();
-    }
-
-    // The positions of one longest strictly increasing subsequence (patience sorting, O(n log n)).
-    private static HashSet<int> LongestIncreasingRun(List<int> values)
-    {
-        var tails = new List<int>();
-        var previous = new int[values.Count];
-        for (var i = 0; i < values.Count; i++)
-        {
-            var low = 0;
-            var high = tails.Count;
-            while (low < high)
-            {
-                var middle = (low + high) / 2;
-                if (values[tails[middle]] < values[i])
-                {
-                    low = middle + 1;
-                }
-                else
-                {
-                    high = middle;
-                }
-            }
-
-            previous[i] = low > 0 ? tails[low - 1] : -1;
-            if (low == tails.Count)
-            {
-                tails.Add(i);
-            }
-            else
-            {
-                tails[low] = i;
-            }
-        }
-
-        var run = new HashSet<int>();
-        for (var i = tails.Count > 0 ? tails[^1] : -1; i >= 0; i = previous[i])
-        {
-            run.Add(i);
-        }
-
-        return run;
     }
 
     // A node that exists on one side only, with a namesake (other key) that exists on the other side only: two
