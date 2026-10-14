@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Neirijnck.Transfr.Compare;
 using Neirijnck.Transfr.Configuration;
+using Neirijnck.Transfr.Local;
 using Neirijnck.Transfr.Remote;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
@@ -8,7 +10,7 @@ using Umbraco.Cms.Core.DependencyInjection;
 namespace Neirijnck.Transfr.Composers;
 
 /// <summary>
-/// Registers the remote configuration and the client that talks to remotes.
+/// Registers the remote configuration, the client that talks to remotes, and the tree readers and compare service.
 /// </summary>
 public class TransfrRemoteComposer : IComposer
 {
@@ -20,5 +22,8 @@ public class TransfrRemoteComposer : IComposer
         builder.Services.AddHttpClient(RemoteClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30));
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<RemoteClient>();
+        builder.Services.AddSingleton<RemoteTreeReader>();
+        builder.Services.AddSingleton<LocalTreeReader>();
+        builder.Services.AddSingleton<TreeCompareService>();
     }
 }

@@ -23,4 +23,9 @@
     <ProjectReference Include="..\..\src\Neirijnck.Transfr.Core\Neirijnck.Transfr.Core.csproj" />
   </ItemGroup>
 
+  <!-- Responses captured from an Umbraco 17.7.0 test site, read by the parser tests. -->
+  <ItemGroup>
+    <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
