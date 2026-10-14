@@ -67,8 +67,11 @@
 
   <Target Name="BuildClient" BeforeTargets="PrepareForBuild" Condition="'$(SkipClientBuild)' != 'true'">
     <Exec WorkingDirectory="$(ClientDir)" Command="npm run build" />
-    <!-- wwwroot was globbed at evaluation, before npm ran: add the fresh output so a clean build includes it as static web assets -->
+    <!-- wwwroot was globbed at evaluation, before npm ran (and emptied it): drop the chunks that are gone (a changed hash),
+         then add the fresh output, so both incremental and clean builds see exactly what npm wrote. A wildcard Remove would
+         not work here: inside a target it is matched against the disk, where the stale files no longer exist. -->
     <ItemGroup>
+      <Content Remove="@(Content)" Condition="!Exists('%(Content.FullPath)')" />
       <Content Include="wwwroot\App_Plugins\Transfr\**" Exclude="@(Content)" />
     </ItemGroup>
   </Target>
