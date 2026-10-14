@@ -3,21 +3,33 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.22.0"
+  },
   "scripts": {
     "watch": "tsc && vite build --watch",
     "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "prettier --write \"**/*.{js,mjs,cjs,jsx,ts,tsx,css,scss,less}\"",
     "format:check": "prettier --check \"**/*.{js,mjs,cjs,jsx,ts,tsx,css,scss,less}\"",
     "generate-client": "node scripts/generate-openapi.js https://localhost:44361/umbraco/swagger/transfr/swagger.json"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@hey-api/openapi-ts": "^0.99.0",
     "@umbraco-cms/backoffice": "17.7.0",
     "chalk": "^5.6.2",
-    "cross-env": "^10.1.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-lit": "^2.3.1",
+    "globals": "^17.13.0",
     "node-fetch": "^3.3.2",
     "prettier": "^3.9.10",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "typescript-eslint": "^8.71.2",
+    "vite": "^7.3.1",
+    "vitest": "^5.0.4"
   }
 }

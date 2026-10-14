@@ -78,8 +78,9 @@ export class TransfrRemotesElement extends UmbLitElement {
 
   async #disconnect(alias: string) {
     await tryExecute(this, TransfrService.disconnect({ path: { alias } }));
-    const { [alias]: _, ...rest } = this._status;
-    this._status = rest;
+    const status = { ...this._status };
+    delete status[alias];
+    this._status = status;
     await this.#load();
   }
 

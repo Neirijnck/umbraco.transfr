@@ -19,7 +19,7 @@ Content compare for Umbraco 17: compare the content trees of two environments si
 
 ## Development
 
-Requirements: .NET 10 SDK, Node 22+, and PowerShell 7 (`pwsh`) for the scripts in `tools/`. Windows PowerShell 5.1 refuses them.
+Requirements: .NET 10 SDK, Node 22.22.0 (`src/Neirijnck.Transfr/Client/.nvmrc`), and PowerShell 7 (`pwsh`) for the scripts in `tools/`. Windows PowerShell 5.1 refuses them. `@umbraco-cms/backoffice` 17.7 declares Node 24.13+ and npm 11+; npm warns about that on Node 22, and the client builds and runs fine with it.
 
 1. Copy `tests/Neirijnck.Transfr.TestSite/appsettings.local.example.json` to `appsettings.local.json` and fill in the admin email and password for the unattended install. The file is gitignored.
 2. Run the test site.
@@ -29,6 +29,26 @@ dotnet run --project tests/Neirijnck.Transfr.TestSite
 ```
 
 `dotnet build` also builds the backoffice client (`npm ci` + `npm run build`). Pass `-p:SkipClientBuild=true` to skip that step.
+
+Checks for the client, run from `src/Neirijnck.Transfr/Client`:
+
+```bash
+npm run typecheck
+```
+
+```bash
+npm run lint
+```
+
+```bash
+npm test
+```
+
+```bash
+npm run format:check
+```
+
+`npm audit` reports advisories in `js-yaml` (through `@hey-api/openapi-ts`, the client generator) and `dompurify` (through `@umbraco-cms/backoffice`). Both are development dependencies: the generator never ships, and the backoffice package is external to the bundle (the CMS serves its own). The suggested fixes are major downgrades, so they are accepted.
 
 To regenerate the TypeScript API client, keep the test site running and run:
 
