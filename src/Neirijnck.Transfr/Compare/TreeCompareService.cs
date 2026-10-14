@@ -21,6 +21,9 @@ public sealed partial class TreeCompareService
     // Remote document requests in flight at once: one level of a large site stays quick without flooding the remote.
     private const int MaxParallelDocumentRequests = 4;
 
+    // Nodes per subtree compare: each costs a document request on both sides, so this bounds one request's duration.
+    private const int MaxSubtreeNodes = 2000;
+
     private readonly LocalTreeReader localTree;
     private readonly RemoteTreeReader remoteTree;
     private readonly LocalDocumentReader localDocuments;
@@ -71,6 +74,25 @@ public sealed partial class TreeCompareService
 
         LogCompared(this.logger, parentKey, remote.Alias, rows.Count, contents.Count, different, failed, requests, stopwatch.ElapsedMilliseconds);
         return new TreeLevelComparison(rows, contents, requests);
+    }
+
+    /// <summary>
+    /// Compares every level below a parent (null = the whole tree), as <see cref="SubtreeWalker"/> walks it.
+    /// </summary>
+    public async Task<SubtreeComparison> CompareSubtreeAsync(RemoteDefinition remote, Guid? parentKey, CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var (levels, truncated) = await SubtreeWalker.WalkAsync(
+            parentKey,
+            (levelKey, token) => this.CompareLevelAsync(remote, levelKey, token),
+            level => level.Rows,
+            MaxSubtreeNodes,
+            cancellationToken);
+
+        var requests = levels.Sum(level => level.Level.RemoteRequests);
+        var nodes = levels.Sum(level => level.Level.Rows.Count);
+        LogSubtreeCompared(this.logger, parentKey, remote.Alias, levels.Count, nodes, requests, truncated, stopwatch.ElapsedMilliseconds);
+        return new SubtreeComparison(levels, requests, truncated);
     }
 
     private async Task<IReadOnlyDictionary<Guid, NodeContentComparison>> CompareContentsAsync(
@@ -135,6 +157,9 @@ public sealed partial class TreeCompareService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Compared tree level {ParentKey} with remote {Alias}: {Rows} rows, {Documents} documents compared ({Different} different, {Failed} failed), {Requests} remote requests, {Milliseconds} ms")]
     private static partial void LogCompared(ILogger logger, Guid? parentKey, string alias, int rows, int documents, int different, int failed, int requests, long milliseconds);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Compared subtree {ParentKey} with remote {Alias}: {Levels} levels, {Nodes} rows, {Requests} remote requests, truncated {Truncated}, {Milliseconds} ms")]
+    private static partial void LogSubtreeCompared(ILogger logger, Guid? parentKey, string alias, int levels, int nodes, int requests, bool truncated, long milliseconds);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Reading document {Key} from remote {Alias} failed")]
     private static partial void LogDocumentFailed(ILogger logger, Guid key, string alias, Exception exception);
