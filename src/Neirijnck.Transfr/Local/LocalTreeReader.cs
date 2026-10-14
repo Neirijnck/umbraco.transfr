@@ -41,7 +41,13 @@ public sealed class LocalTreeReader
                 ordering: Ordering.By("sortOrder"));
 
             var before = nodes.Count;
-            nodes.AddRange(page.Select((entity, index) => new TreeNode(entity.Key, NameOf(entity, preferredCulture), before + index, entity.HasChildren)));
+            nodes.AddRange(page.Select((entity, index) => new TreeNode(
+                entity.Key,
+                NameOf(entity, preferredCulture),
+                before + index,
+                entity.HasChildren,
+                (entity as IContentEntitySlim)?.ContentTypeKey,
+                (entity as IContentEntitySlim)?.ContentTypeIcon)));
             if (nodes.Count == before)
             {
                 break;

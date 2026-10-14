@@ -3,7 +3,8 @@
 /// <summary>
 /// One row of a compared tree level. Status is one of InBoth, OnlyLocal, OnlyRemote, ElsewhereOnRemote,
 /// ElsewhereLocally. Content is set for a node found on both sides. OrderDiffers: under this parent on both sides,
-/// but in another place among its siblings.
+/// but in another place among its siblings. SchemaProblems: why the node's document type blocks a copy (null when its
+/// schema matches).
 /// </summary>
 public sealed record TreeRowResponseModel(
     Guid Key,
@@ -13,4 +14,5 @@ public sealed record TreeRowResponseModel(
     Guid? OtherParentKey,
     Guid? SameNameKey,
     TreeRowContentResponseModel? Content,
-    bool OrderDiffers);
+    bool OrderDiffers,
+    IReadOnlyList<SchemaProblemResponseModel>? SchemaProblems);

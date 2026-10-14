@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Neirijnck.Transfr.Core.Content;
 using Neirijnck.Transfr.Core.Remote;
+using Neirijnck.Transfr.Core.Schema;
 using Neirijnck.Transfr.Core.Tree;
 using Neirijnck.Transfr.Local;
 using Neirijnck.Transfr.Remote;
@@ -28,6 +29,8 @@ public sealed partial class TreeCompareService
     private readonly RemoteTreeReader remoteTree;
     private readonly LocalDocumentReader localDocuments;
     private readonly RemoteDocumentReader remoteDocuments;
+    private readonly SchemaCheckService schemaChecks;
+    private readonly LocalSchemaNames schemaNames;
     private readonly ILanguageService languageService;
     private readonly ILogger<TreeCompareService> logger;
 
@@ -36,6 +39,8 @@ public sealed partial class TreeCompareService
         RemoteTreeReader remoteTree,
         LocalDocumentReader localDocuments,
         RemoteDocumentReader remoteDocuments,
+        SchemaCheckService schemaChecks,
+        LocalSchemaNames schemaNames,
         ILanguageService languageService,
         ILogger<TreeCompareService> logger)
     {
@@ -43,6 +48,8 @@ public sealed partial class TreeCompareService
         this.remoteTree = remoteTree;
         this.localDocuments = localDocuments;
         this.remoteDocuments = remoteDocuments;
+        this.schemaChecks = schemaChecks;
+        this.schemaNames = schemaNames;
         this.languageService = languageService;
         this.logger = logger;
     }
@@ -68,12 +75,29 @@ public sealed partial class TreeCompareService
             .Select(row => row.Key)
             .ToList();
         var contents = await this.CompareContentsAsync(remote, bothSides, cancellationToken);
-        var requests = readRequests + locateRequests + bothSides.Count;
+
+        // The schema each node would be copied with: its local type, or the remote's for a node only there.
+        var documentTypes = rows.Select(DocumentTypeOf).OfType<Guid>().Distinct().ToList();
+        var schema = await this.schemaChecks.CheckAsync(remote, documentTypes, cancellationToken);
+
+        // Names for the document type icons on both sides: this environment's, else the remote's from the check.
+        var sideTypes = rows.SelectMany(row => new[] { row.Local?.DocumentTypeKey, row.Remote?.DocumentTypeKey }).OfType<Guid>();
+        var typeNames = new Dictionary<Guid, string>(this.schemaNames.DocumentTypeNames(sideTypes));
+        foreach (var problem in schema.Checks.Values.SelectMany(check => check.Problems))
+        {
+            if (problem.Kind == SchemaItemKind.DocumentType && problem.Name is not null)
+            {
+                typeNames.TryAdd(problem.Key, problem.Name);
+            }
+        }
+
+        var requests = readRequests + locateRequests + bothSides.Count + schema.RemoteRequests;
         var different = contents.Values.Count(content => content.Comparison is { IsIdentical: false });
         var failed = contents.Values.Count(content => content.Error is not null);
+        var blocked = schema.Checks.Count(check => !check.Value.IsOk);
 
-        LogCompared(this.logger, parentKey, remote.Alias, rows.Count, contents.Count, different, failed, requests, stopwatch.ElapsedMilliseconds);
-        return new TreeLevelComparison(rows, contents, requests);
+        LogCompared(this.logger, parentKey, remote.Alias, rows.Count, contents.Count, different, failed, blocked, requests, stopwatch.ElapsedMilliseconds);
+        return new TreeLevelComparison(rows, contents, schema, typeNames, requests);
     }
 
     /// <summary>
@@ -155,8 +179,13 @@ public sealed partial class TreeCompareService
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Compared tree level {ParentKey} with remote {Alias}: {Rows} rows, {Documents} documents compared ({Different} different, {Failed} failed), {Requests} remote requests, {Milliseconds} ms")]
-    private static partial void LogCompared(ILogger logger, Guid? parentKey, string alias, int rows, int documents, int different, int failed, int requests, long milliseconds);
+    /// <summary>
+    /// The document type a row's node would be copied with: its local type, or the remote's for a node only there.
+    /// </summary>
+    public static Guid? DocumentTypeOf(TreeCompareRow row) => (row.Local ?? row.Remote)?.DocumentTypeKey;
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Compared tree level {ParentKey} with remote {Alias}: {Rows} rows, {Documents} documents compared ({Different} different, {Failed} failed), {Blocked} document types blocked by schema, {Requests} remote requests, {Milliseconds} ms")]
+    private static partial void LogCompared(ILogger logger, Guid? parentKey, string alias, int rows, int documents, int different, int failed, int blocked, int requests, long milliseconds);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Compared subtree {ParentKey} with remote {Alias}: {Levels} levels, {Nodes} rows, {Requests} remote requests, truncated {Truncated}, {Milliseconds} ms")]
     private static partial void LogSubtreeCompared(ILogger logger, Guid? parentKey, string alias, int levels, int nodes, int requests, bool truncated, long milliseconds);
