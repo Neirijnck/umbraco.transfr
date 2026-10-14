@@ -4,7 +4,10 @@ import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { tryExecute } from '@umbraco-cms/backoffice/resources';
 import { TransfrService } from '../api/index.js';
 import type { RemoteResponseModel, TreeRowResponseModel } from '../api/index.js';
+import { describeDifference, summarizeDifferences } from './content-summary.js';
 import { problemMessage } from './problem.js';
+import { countSubtree, describeCounts, formatDuration, positionsToReveal } from './subtree.js';
+import type { SubtreeCounts } from './subtree.js';
 import { rowView } from './tree-row-view.js';
 import type { SideKind } from './tree-row-view.js';
 
@@ -12,6 +15,11 @@ type Level =
   { state: 'loading' } | { state: 'failed'; message: string } | { state: 'loaded'; rows: Array<TreeRowResponseModel> };
 
 type Side = 'local' | 'remote';
+
+type SubtreeRun =
+  | { state: 'running'; label: string }
+  | { state: 'failed'; label: string; message: string }
+  | { state: 'done'; label: string; counts: SubtreeCounts; truncated: boolean; milliseconds: number };
 
 // The root level has no parent key; '' stands for it in the level and expansion maps.
 const ROOT = '';
@@ -46,6 +54,10 @@ export class TransfrContentCompareElement extends UmbLitElement {
   @state()
   private _flash?: string;
 
+  // The last "compare subtree": running, its outcome, or why it failed.
+  @state()
+  private _subtree?: SubtreeRun;
+
   override connectedCallback() {
     super.connectedCallback();
     void this.#loadRemotes();
@@ -61,6 +73,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
     this._alias = alias;
     this._levels = {};
     this._expanded = new Set();
+    this._subtree = undefined;
     if (alias) {
       void this.#loadLevel(ROOT);
     }
@@ -108,6 +121,52 @@ export class TransfrContentCompareElement extends UmbLitElement {
     if (!this._levels[key] || this._levels[key].state === 'failed') {
       void this.#loadLevel(key);
     }
+  }
+
+  // Compares every level below a parent in one go, puts the levels in the tree and opens it down to each difference.
+  async #compareSubtree(parentKey: string, position: string | undefined, label: string) {
+    const alias = this._alias;
+    if (!alias) {
+      return;
+    }
+
+    this._subtree = { state: 'running', label };
+    const started = performance.now();
+    const { data, error } = await tryExecute(
+      this,
+      TransfrService.compareSubtree({ path: { alias }, query: parentKey === ROOT ? undefined : { parentKey } }),
+      { disableNotifications: true },
+    );
+
+    // The remote was switched while comparing: the result belongs to the old tree.
+    if (alias !== this._alias) {
+      return;
+    }
+
+    if (!data) {
+      this._subtree = { state: 'failed', label, message: problemMessage(error, 'Comparing failed.') };
+      return;
+    }
+
+    const levels = { ...this._levels };
+    for (const level of data.levels) {
+      levels[level.parentKey ?? ROOT] = { state: 'loaded', rows: level.rows };
+    }
+    this._levels = levels;
+
+    const expanded = new Set([...this._expanded, ...positionsToReveal(data.levels)]);
+    if (position) {
+      expanded.add(position);
+    }
+    this._expanded = expanded;
+
+    this._subtree = {
+      state: 'done',
+      label,
+      counts: countSubtree(data.levels),
+      truncated: data.truncated,
+      milliseconds: performance.now() - started,
+    };
   }
 
   // The loaded level a node's row is in (the first one, if it shows up twice), or undefined when it isn't loaded yet.
@@ -179,8 +238,18 @@ export class TransfrContentCompareElement extends UmbLitElement {
         <uui-button look="secondary" label="Refresh" @click=${() => this.#selectRemote(this._alias)}>
           <umb-icon name="icon-refresh"></umb-icon> Refresh
         </uui-button>
+        <uui-button
+          look="secondary"
+          label="Compare everything"
+          .state=${this._subtree?.state === 'running' ? 'waiting' : undefined}
+          ?disabled=${this._subtree?.state === 'running'}
+          @click=${() => this.#compareSubtree(ROOT, undefined, 'the whole tree')}
+        >
+          <umb-icon name="icon-tree"></umb-icon> Compare everything
+        </uui-button>
         ${this.#renderLegend()}
       </div>
+      ${this.#renderSubtree(remote?.name ?? 'the remote')}
       <div class="panes">
         <div class="pane-head local">
           <umb-icon name="icon-home"></umb-icon>
@@ -201,10 +270,50 @@ export class TransfrContentCompareElement extends UmbLitElement {
     `;
   }
 
+  #renderSubtree(remoteName: string) {
+    const run = this._subtree;
+    if (!run) {
+      return nothing;
+    }
+
+    const close = html`<uui-button
+      compact
+      label="Close"
+      ?disabled=${run.state === 'running'}
+      @click=${() => (this._subtree = undefined)}
+      ><umb-icon name="icon-wrong"></umb-icon
+    ></uui-button>`;
+
+    if (run.state === 'running') {
+      return html`<div class="banner" role="status">
+        <uui-loader-circle></uui-loader-circle>
+        <span>Comparing ${run.label} with ${remoteName}…</span>
+      </div>`;
+    }
+
+    if (run.state === 'failed') {
+      return html`<div class="banner error" role="alert" data-test="subtree-error">
+        <umb-icon name="icon-alert"></umb-icon>
+        <span>Comparing ${run.label} failed: ${run.message}</span>
+        ${close}
+      </div>`;
+    }
+
+    return html`<div class="banner" role="status" data-test="subtree-summary">
+      <umb-icon name="icon-tree"></umb-icon>
+      <span>
+        Compared ${run.label} in ${formatDuration(run.milliseconds)}. ${describeCounts(run.counts, remoteName)}
+        ${run.truncated ? 'Stopped at the node limit: compare a smaller branch for the rest.' : nothing}
+      </span>
+      ${close}
+    </div>`;
+  }
+
   #renderLegend() {
     return html`
       <ul class="legend" aria-label="Legend">
         <li><span class="swatch same"></span> Same place in both</li>
+        <li><span class="swatch changed"></span> Content differs</li>
         <li><span class="swatch only"></span> Only on this side</li>
         <li><span class="swatch missing"></span> Not on this side</li>
         <li><span class="swatch moved"></span> Under another parent on the other side</li>
@@ -294,8 +403,11 @@ export class TransfrContentCompareElement extends UmbLitElement {
             ></uui-button>`
           : html`<span class="expander"></span>`;
 
+    // Changed content tints both sides of a row that is in the same place; a structural difference keeps its own colour.
+    const changed = kind === 'same' && row.content?.status === 'Different';
+
     return html`
-      <div class="cell ${side} ${kind}">
+      <div class="cell ${side} ${kind} ${changed ? 'changed' : ''}">
         ${expander}
         ${
           node && kind !== 'missing' && kind !== 'elsewhere'
@@ -306,13 +418,30 @@ export class TransfrContentCompareElement extends UmbLitElement {
               `
             : this.#renderPlaceholder(side, row, kind, remoteName)
         }
+        ${
+          side === 'local' && hasChildren
+            ? html`<uui-button
+                class="subtree"
+                compact
+                look="secondary"
+                label=${`Compare everything below ${name}`}
+                title=${`Compare everything below ${name}`}
+                ?disabled=${this._subtree?.state === 'running'}
+                @click=${() => this.#compareSubtree(row.key, `${parentKey}/${row.key}`, `everything below ${name}`)}
+                ><umb-icon name="icon-tree"></umb-icon
+              ></uui-button>`
+            : nothing
+        }
       </div>
     `;
   }
 
   // Chips only for differences: identical nodes stay quiet. The schema check adds its "blocked" chip here later.
   #renderChips(side: Side, row: TreeRowResponseModel, kind: SideKind, known: boolean, remoteName: string) {
+    // Content and order belong to the pair: told once, on the left for a row in the same place, else where it is.
+    const tellsContent = (kind === 'same' && side === 'local') || kind === 'moved';
     return html`
+      ${tellsContent ? this.#renderContentChips(row, remoteName) : nothing}
       ${
         kind === 'only'
           ? this.#chip('positive', 'icon-add', side === 'local' ? 'Only here' : `Only on ${remoteName}`)
@@ -341,8 +470,52 @@ export class TransfrContentCompareElement extends UmbLitElement {
     `;
   }
 
-  #chip(color: 'positive' | 'warning' | 'danger', icon: string, text: string, title?: string) {
-    return html`<uui-tag color=${color} look="primary" title=${title ?? text}
+  #renderContentChips(row: TreeRowResponseModel, remoteName: string) {
+    const content = row.content;
+    return html`
+      ${
+        content?.status === 'Different'
+          ? html`<span class="summary">${summarizeDifferences(content.differences)}</span> ${this.#chip(
+                'default',
+                'icon-edit',
+                'Changed',
+                `Differs from ${remoteName}:\n${content.differences.map(describeDifference).join('\n')}`,
+              )}`
+          : nothing
+      }
+      ${
+        content?.status === 'Failed'
+          ? this.#chip(
+              'danger',
+              'icon-wrong',
+              'Not compared',
+              content.error ?? 'The content could not be compared.',
+              'outline',
+            )
+          : nothing
+      }
+      ${
+        row.orderDiffers
+          ? this.#chip(
+              'default',
+              'icon-navigation-vertical',
+              'Order differs',
+              `Sits in another place among its siblings on ${remoteName}.`,
+              'outline',
+            )
+          : nothing
+      }
+    `;
+  }
+
+  #chip(
+    color: 'default' | 'positive' | 'warning' | 'danger',
+    icon: string,
+    text: string,
+    title?: string,
+    look: 'primary' | 'outline' = 'primary',
+  ) {
+    return html`<uui-tag color=${color} look=${look} title=${title ?? text}
       ><span class="chip"><umb-icon name=${icon}></umb-icon>${text}</span></uui-tag
     >`;
   }
@@ -401,6 +574,37 @@ export class TransfrContentCompareElement extends UmbLitElement {
         align-items: center;
         gap: var(--uui-size-space-3);
         margin-bottom: var(--uui-size-space-5);
+      }
+
+      .banner {
+        display: flex;
+        align-items: center;
+        gap: var(--uui-size-space-3);
+        margin-bottom: var(--uui-size-space-5);
+        padding: var(--uui-size-space-3) var(--uui-size-space-5);
+        border-left: 4px solid var(--uui-color-selected);
+        border-radius: var(--uui-border-radius);
+        background: var(--uui-color-surface);
+      }
+
+      .banner > span {
+        flex: 1;
+      }
+
+      .banner.error {
+        border-left-color: var(--uui-color-danger);
+        color: var(--uui-color-danger);
+      }
+
+      /* Shown on hover and on keyboard focus, so the trees stay calm but the button stays reachable. */
+      .subtree {
+        flex-shrink: 0;
+        opacity: 0;
+      }
+
+      .row:hover .subtree,
+      .subtree:focus-within {
+        opacity: 1;
       }
 
       .legend {
@@ -546,8 +750,10 @@ export class TransfrContentCompareElement extends UmbLitElement {
       .chips {
         display: flex;
         flex-wrap: wrap;
+        align-items: center;
         gap: var(--uui-size-space-2);
         margin-left: auto;
+        min-width: 0;
       }
 
       /* Block-level flex: an inline-flex box sits on the text baseline and leaves descender space below it, which put
@@ -560,6 +766,22 @@ export class TransfrContentCompareElement extends UmbLitElement {
       }
 
       /* Only on this side: a solid accent and a tint. */
+      /* Same place in both, other content: a blue accent and tint on both sides. "Selected" is blue in the light and the
+         dark theme; "interactive" is near-white in the dark theme. */
+      .cell.changed,
+      .swatch.changed {
+        border-left-color: var(--uui-color-selected);
+        background-color: color-mix(in srgb, var(--uui-color-selected) 12%, var(--uui-color-surface));
+      }
+
+      .summary {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--uui-color-text-alt);
+        font-size: var(--uui-type-small-size);
+      }
+
       .cell.only,
       .swatch.only {
         border-left-color: var(--uui-color-positive);

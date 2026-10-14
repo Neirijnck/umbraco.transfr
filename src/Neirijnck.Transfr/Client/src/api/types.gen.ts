@@ -11,6 +11,13 @@ export type ConnectRemoteRequestModel = {
     clientSecret: string;
 };
 
+export type ContentDifferenceResponseModel = {
+    kind: string;
+    alias?: string | null;
+    culture?: string | null;
+    segment?: string | null;
+};
+
 export type ProblemDetails = {
     type?: string | null;
     title?: string | null;
@@ -43,9 +50,26 @@ export type RemotesResponseModel = {
     remotes: Array<RemoteResponseModel>;
 };
 
+export type SubtreeLevelResponseModel = {
+    parentKey?: string | null;
+    rows: Array<TreeRowResponseModel>;
+};
+
+export type SubtreeResponseModel = {
+    levels: Array<SubtreeLevelResponseModel>;
+    remoteRequests: number;
+    truncated: boolean;
+};
+
 export type TreeLevelResponseModel = {
     rows: Array<TreeRowResponseModel>;
     remoteRequests: number;
+};
+
+export type TreeRowContentResponseModel = {
+    status: string;
+    differences: Array<ContentDifferenceResponseModel>;
+    error?: string | null;
 };
 
 export type TreeRowResponseModel = {
@@ -55,6 +79,8 @@ export type TreeRowResponseModel = {
     remote?: TreeSideResponseModel | null;
     otherParentKey?: string | null;
     sameNameKey?: string | null;
+    content?: TreeRowContentResponseModel | null;
+    orderDiffers: boolean;
 };
 
 export type TreeSideResponseModel = {
@@ -189,6 +215,47 @@ export type GetStatusResponses = {
 };
 
 export type GetStatusResponse = GetStatusResponses[keyof GetStatusResponses];
+
+export type CompareSubtreeData = {
+    body?: never;
+    path: {
+        alias: string;
+    };
+    query?: {
+        parentKey?: string;
+    };
+    url: '/umbraco/management/api/v1/transfr/remotes/{alias}/subtree';
+};
+
+export type CompareSubtreeErrors = {
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+    /**
+     * The authenticated user does not have access to this resource
+     */
+    403: unknown;
+    /**
+     * Not Found
+     */
+    404: unknown;
+    /**
+     * Bad Gateway
+     */
+    502: ProblemDetails;
+};
+
+export type CompareSubtreeError = CompareSubtreeErrors[keyof CompareSubtreeErrors];
+
+export type CompareSubtreeResponses = {
+    /**
+     * OK
+     */
+    200: SubtreeResponseModel;
+};
+
+export type CompareSubtreeResponse = CompareSubtreeResponses[keyof CompareSubtreeResponses];
 
 export type CompareTreeLevelData = {
     body?: never;
