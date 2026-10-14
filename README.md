@@ -102,6 +102,8 @@ Transfr reads and writes a remote through the remote's own Management API, signe
 2. An **API user** in that group.
 3. **Client credentials** for that user. The client id must start with `umbraco-back-office-`.
 
+Transfr also reads the remote's document types and data types, by key, to check that a node's schema matches before it can be copied. This group can read those without the Settings section, so don't add it.
+
 Then connect to the remote from the environment you compare **from**, in one of two ways.
 
 **At runtime.** In the Remotes view of the Transfr section, fill in a name, the remote's address, the client id and the client secret, and choose **Connect**. Transfr signs in right away; if that fails, nothing is kept and the reason is shown. A connection is kept in server memory for your user only, never in the database or a file, until you disconnect it or the site restarts. Runtime connections are allowed when `Transfr:AllowRuntimeRemotes` is true; when it is not set, only in the `Development` and `Local` environments, so a deployed site doesn't offer them unless you switch it on.
@@ -124,7 +126,7 @@ Then connect to the remote from the environment you compare **from**, in one of 
 }
 ```
 
-`BaseUrl` is the site root and must use https (plain http only for this machine). The Transfr section has a Content view, which shows this environment's content tree next to a remote's, compared by key one level at a time as you expand it, with every node that exists on both sides marked when its content or its place among its siblings differs (**Compare everything**, or the button on a node, compares a whole branch at once, up to 2,000 nodes, and opens the tree down to each difference), and a Remotes view, which lists the remotes with a connection test. An environment without configured remotes and without runtime connections shows no Transfr UI, and its Transfr endpoints answer 404. Only administrators can use Transfr. On first boot the package grants its section to the Administrators group (a package migration); other groups can be given the section by hand, but the endpoints still require administrator rights.
+`BaseUrl` is the site root and must use https (plain http only for this machine). The Transfr section has a Content view, which shows this environment's content tree next to a remote's, compared by key one level at a time as you expand it, with every node that exists on both sides marked when its content or its place among its siblings differs (**Compare everything**, or the button on a node, compares a whole branch at once, up to 2,000 nodes, and opens the tree down to each difference; clicking a node's name shows it on both sides, property by property and block by block, with the changed words marked; a node whose document type is missing or different on the other side is greyed out with the reason, and a remote that was installed separately is refused as a whole), and a Remotes view, which lists the remotes with a connection test. An environment without configured remotes and without runtime connections shows no Transfr UI, and its Transfr endpoints answer 404. Only administrators can use Transfr. On first boot the package grants its section to the Administrators group (a package migration); other groups can be given the section by hand, but the endpoints still require administrator rights.
 
 The environment you compare from must be able to reach the remote: a developer machine can reach a hosted site, not the other way round.
 

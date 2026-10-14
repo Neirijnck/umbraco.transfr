@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CompareSubtreeData, CompareSubtreeErrors, CompareSubtreeResponses, CompareTreeLevelData, CompareTreeLevelErrors, CompareTreeLevelResponses, ConnectData, ConnectErrors, ConnectResponses, DisconnectData, DisconnectErrors, DisconnectResponses, GetRemotesData, GetRemotesErrors, GetRemotesResponses, GetStatusData, GetStatusErrors, GetStatusResponses } from './types.gen';
+import type { CompareSubtreeData, CompareSubtreeErrors, CompareSubtreeResponses, CompareTreeLevelData, CompareTreeLevelErrors, CompareTreeLevelResponses, ConnectData, ConnectErrors, ConnectResponses, DiffDocumentData, DiffDocumentErrors, DiffDocumentResponses, DisconnectData, DisconnectErrors, DisconnectResponses, GetRemotesData, GetRemotesErrors, GetRemotesResponses, GetStatusData, GetStatusErrors, GetStatusResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -43,6 +43,14 @@ export class TransfrService {
         return (options.client ?? client).delete<DisconnectResponses, DisconnectErrors, ThrowOnError>({
             security: [{ scheme: 'bearer', type: 'http' }],
             url: '/umbraco/management/api/v1/transfr/remotes/{alias}',
+            ...options
+        });
+    }
+    
+    public static diffDocument<ThrowOnError extends boolean = false>(options: Options<DiffDocumentData, ThrowOnError>): RequestResult<DiffDocumentResponses, DiffDocumentErrors, ThrowOnError> {
+        return (options.client ?? client).get<DiffDocumentResponses, DiffDocumentErrors, ThrowOnError>({
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/umbraco/management/api/v1/transfr/remotes/{alias}/document/{key}/diff',
             ...options
         });
     }

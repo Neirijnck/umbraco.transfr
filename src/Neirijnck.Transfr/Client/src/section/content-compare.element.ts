@@ -3,9 +3,13 @@ import type { UUISelectElement } from '@umbraco-cms/backoffice/external/uui';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { tryExecute } from '@umbraco-cms/backoffice/resources';
 import { TransfrService } from '../api/index.js';
-import type { RemoteResponseModel, TreeRowResponseModel } from '../api/index.js';
+import type { RemoteResponseModel, SeparateInstallResponseModel, TreeRowResponseModel } from '../api/index.js';
+import { umbOpenModal } from '@umbraco-cms/backoffice/modal';
 import { describeDifference, summarizeDifferences } from './content-summary.js';
+import { TRANSFR_NODE_DIFF_MODAL } from './node-diff-modal.token.js';
 import { problemMessage } from './problem.js';
+import { blockOf, describeSeparateInstall, passesBlockOn } from './schema-view.js';
+import type { RowBlock } from './schema-view.js';
 import { countSubtree, describeCounts, formatDuration, positionsToReveal } from './subtree.js';
 import type { SubtreeCounts } from './subtree.js';
 import { rowView } from './tree-row-view.js';
@@ -58,6 +62,10 @@ export class TransfrContentCompareElement extends UmbLitElement {
   @state()
   private _subtree?: SubtreeRun;
 
+  // Evidence that the remote was installed separately: then nothing can be copied to or from it.
+  @state()
+  private _separateInstall: Array<SeparateInstallResponseModel> = [];
+
   override connectedCallback() {
     super.connectedCallback();
     void this.#loadRemotes();
@@ -74,6 +82,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
     this._levels = {};
     this._expanded = new Set();
     this._subtree = undefined;
+    this._separateInstall = [];
     if (alias) {
       void this.#loadLevel(ROOT);
     }
@@ -106,6 +115,16 @@ export class TransfrContentCompareElement extends UmbLitElement {
         ? { state: 'loaded', rows: data.rows }
         : { state: 'failed', message: problemMessage(error, 'Comparing this level failed.') },
     };
+    this.#addSeparateInstall(data?.separateInstall ?? []);
+  }
+
+  // Evidence of a separately installed remote, from any level or subtree compared so far.
+  #addSeparateInstall(evidence: Array<SeparateInstallResponseModel>) {
+    const known = new Set(this._separateInstall.map((item) => item.localKey));
+    const added = evidence.filter((item) => !known.has(item.localKey));
+    if (added.length > 0) {
+      this._separateInstall = [...this._separateInstall, ...added];
+    }
   }
 
   #toggle(parentKey: string, key: string) {
@@ -153,6 +172,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
       levels[level.parentKey ?? ROOT] = { state: 'loaded', rows: level.rows };
     }
     this._levels = levels;
+    this.#addSeparateInstall(data.separateInstall);
 
     const expanded = new Set([...this._expanded, ...positionsToReveal(data.levels)]);
     if (position) {
@@ -167,6 +187,39 @@ export class TransfrContentCompareElement extends UmbLitElement {
       truncated: data.truncated,
       milliseconds: performance.now() - started,
     };
+  }
+
+  // A click anywhere on a row of a node on both sides opens its diff, except on the row's own buttons (expand, Show,
+  // compare below), which do their own thing. The name stays a button so the diff is reachable by keyboard too.
+  #rowClick(event: MouseEvent, row: TreeRowResponseModel) {
+    if (!row.content) {
+      return;
+    }
+
+    const onControl = event
+      .composedPath()
+      .some((target) => target instanceof HTMLElement && ['BUTTON', 'UUI-BUTTON', 'A'].includes(target.tagName));
+    if (!onControl) {
+      this.#openDiff(row);
+    }
+  }
+
+  // A node found on both sides opens its diff; closing the panel rejects the promise, which is not an error.
+  #openDiff(row: TreeRowResponseModel) {
+    const alias = this._alias;
+    if (!alias) {
+      return;
+    }
+
+    const remote = this._remotes?.find((candidate) => candidate.alias === alias);
+    umbOpenModal(this, TRANSFR_NODE_DIFF_MODAL, {
+      data: {
+        alias,
+        remoteName: remote?.name ?? alias,
+        key: row.key,
+        name: row.local?.name ?? row.remote?.name ?? row.key,
+      },
+    }).catch(() => undefined);
   }
 
   // The loaded level a node's row is in (the first one, if it shows up twice), or undefined when it isn't loaded yet.
@@ -249,6 +302,14 @@ export class TransfrContentCompareElement extends UmbLitElement {
         </uui-button>
         ${this.#renderLegend()}
       </div>
+      ${
+        this._separateInstall.length > 0
+          ? html`<div class="banner error" role="alert" data-test="separate-install">
+              <umb-icon name="icon-block"></umb-icon>
+              <span>${describeSeparateInstall(this._separateInstall, remote?.name ?? 'The remote')}</span>
+            </div>`
+          : nothing
+      }
       ${this.#renderSubtree(remote?.name ?? 'the remote')}
       <div class="panes">
         <div class="pane-head local">
@@ -265,7 +326,9 @@ export class TransfrContentCompareElement extends UmbLitElement {
             <small>${remote?.baseUrl}</small>
           </div>
         </div>
-        <div class="tree">${this.#renderLevel(ROOT, 0, remote?.name ?? 'the remote')}</div>
+        <div class="tree ${this._separateInstall.length > 0 ? 'refused' : ''}">
+          ${this.#renderLevel(ROOT, 0, remote?.name ?? 'the remote', undefined)}
+        </div>
       </div>
     `;
   }
@@ -318,11 +381,13 @@ export class TransfrContentCompareElement extends UmbLitElement {
         <li><span class="swatch missing"></span> Not on this side</li>
         <li><span class="swatch moved"></span> Under another parent on the other side</li>
         <li><span class="swatch conflict"></span> Same name, other key</li>
+        <li><span class="swatch blocked"></span> Blocked by the schema</li>
       </ul>
     `;
   }
 
-  #renderLevel(parentKey: string, depth: number, remoteName: string): unknown {
+  // blockedParent: the name of a parent that can't be copied and isn't on the other side, so this level inherits it.
+  #renderLevel(parentKey: string, depth: number, remoteName: string, blockedParent: string | undefined): unknown {
     const level = this._levels[parentKey];
     if (!level || level.state === 'loading') {
       return html`<div class="message" style="--depth: ${depth}"><uui-loader-bar></uui-loader-bar></div>`;
@@ -346,17 +411,31 @@ export class TransfrContentCompareElement extends UmbLitElement {
       ${repeat(
         level.rows,
         (row) => row.key,
-        (row) => this.#renderRow(parentKey, row, depth, remoteName),
+        (row) => this.#renderRow(parentKey, row, depth, remoteName, blockedParent),
       )}
     </ul>`;
   }
 
-  #renderRow(parentKey: string, row: TreeRowResponseModel, depth: number, remoteName: string) {
+  #renderRow(
+    parentKey: string,
+    row: TreeRowResponseModel,
+    depth: number,
+    remoteName: string,
+    blockedParent: string | undefined,
+  ) {
     const position = `${parentKey}/${row.key}`;
     const expanded = this._expanded.has(position);
     const view = rowView(row.status);
     const paired = this._hoverKey !== undefined && row.sameNameKey === this._hoverKey;
-    const classes = ['row', paired ? 'paired' : '', this._flash === position ? 'flash' : ''].join(' ');
+    const block = blockOf(row, blockedParent, remoteName);
+    const name = row.local?.name ?? row.remote?.name ?? row.key;
+    const classes = [
+      'row',
+      row.content ? 'opens-diff' : '',
+      block ? 'blocked' : '',
+      paired ? 'paired' : '',
+      this._flash === position ? 'flash' : '',
+    ].join(' ');
 
     return html`
       <li data-key=${row.key} data-status=${row.status} data-position=${position}>
@@ -367,11 +446,16 @@ export class TransfrContentCompareElement extends UmbLitElement {
           @mouseleave=${() => (this._hoverKey = undefined)}
           @focusin=${() => (this._hoverKey = row.key)}
           @focusout=${() => (this._hoverKey = undefined)}
+          @click=${(event: MouseEvent) => this.#rowClick(event, row)}
         >
-          ${this.#renderCell('local', parentKey, row, view.local, view.known, expanded, remoteName)}
-          ${this.#renderCell('remote', parentKey, row, view.remote, view.known, expanded, remoteName)}
+          ${this.#renderCell('local', parentKey, row, view.local, view.known, expanded, remoteName, block)}
+          ${this.#renderCell('remote', parentKey, row, view.remote, view.known, expanded, remoteName, block)}
         </div>
-        ${expanded ? this.#renderLevel(row.key, depth + 1, remoteName) : nothing}
+        ${
+          expanded
+            ? this.#renderLevel(row.key, depth + 1, remoteName, block && passesBlockOn(row) ? name : undefined)
+            : nothing
+        }
       </li>
     `;
   }
@@ -384,6 +468,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
     known: boolean,
     expanded: boolean,
     remoteName: string,
+    block: RowBlock | undefined,
   ) {
     const node = side === 'local' ? row.local : row.remote;
     const name = row.local?.name ?? row.remote?.name ?? row.key;
@@ -412,9 +497,23 @@ export class TransfrContentCompareElement extends UmbLitElement {
         ${
           node && kind !== 'missing' && kind !== 'elsewhere'
             ? html`
-                <umb-icon class="doc" name="icon-document"></umb-icon>
-                <span class="name">${node.name}</span>
-                <span class="chips">${this.#renderChips(side, row, kind, known, remoteName)}</span>
+                <umb-icon
+                  class="doc"
+                  name=${node.documentTypeIcon ?? 'icon-document'}
+                  title=${node.documentTypeName ?? 'Document type unknown here'}
+                ></umb-icon>
+                ${
+                  row.content
+                    ? html`<button
+                        class="name link"
+                        title=${`Show ${node.name} on both sides`}
+                        @click=${() => this.#openDiff(row)}
+                      >
+                        ${node.name}
+                      </button>`
+                    : html`<span class="name">${node.name}</span>`
+                }
+                <span class="chips">${this.#renderChips(side, row, kind, known, remoteName, block)}</span>
               `
             : this.#renderPlaceholder(side, row, kind, remoteName)
         }
@@ -436,11 +535,29 @@ export class TransfrContentCompareElement extends UmbLitElement {
     `;
   }
 
-  // Chips only for differences: identical nodes stay quiet. The schema check adds its "blocked" chip here later.
-  #renderChips(side: Side, row: TreeRowResponseModel, kind: SideKind, known: boolean, remoteName: string) {
+  // Chips only for differences: identical nodes stay quiet.
+  #renderChips(
+    side: Side,
+    row: TreeRowResponseModel,
+    kind: SideKind,
+    known: boolean,
+    remoteName: string,
+    block: RowBlock | undefined,
+  ) {
     // Content and order belong to the pair: told once, on the left for a row in the same place, else where it is.
     const tellsContent = (kind === 'same' && side === 'local') || kind === 'moved';
+    // A block is told once too, on the side the node would be copied from.
+    const tellsBlock = block && (tellsContent || kind === 'only');
     return html`
+      ${
+        tellsBlock
+          ? html`<uui-tag class="blocked-chip" color="danger" look="outline" title=${block.details.join('\n')}
+              ><span class="chip"
+                ><umb-icon name="icon-block"></umb-icon>${block.inherited ? 'Blocked by parent' : 'Blocked'}</span
+              ></uui-tag
+            >`
+          : nothing
+      }
       ${tellsContent ? this.#renderContentChips(row, remoteName) : nothing}
       ${
         kind === 'only'
@@ -739,6 +856,48 @@ export class TransfrContentCompareElement extends UmbLitElement {
 
       .doc.faded {
         opacity: 0.35;
+      }
+
+      .row.opens-diff {
+        cursor: pointer;
+      }
+
+      /* Can't be copied (schema, or a parent that can't): greyed out, colours muted, only the Blocked chip stands out.
+         The reason is in the chip's tooltip, so it's never conveyed by grey alone. A refused remote greys everything. */
+      .row.blocked .cell,
+      .tree.refused .cell,
+      .swatch.blocked {
+        background-color: var(--uui-color-disabled);
+        border-left-color: var(--uui-color-disabled-standalone);
+      }
+
+      /* The hover-only subtree button keeps its own opacity; the Blocked chip keeps its colour. */
+      .row.blocked .cell > :not(.chips):not(.subtree),
+      .row.blocked uui-tag:not(.blocked-chip),
+      .tree.refused .cell > :not(.chips):not(.subtree),
+      .tree.refused uui-tag:not(.blocked-chip) {
+        opacity: 0.55;
+        filter: grayscale(1);
+      }
+
+      /* The name of a node on both sides opens its diff: a button that reads as the name. */
+      .name.link {
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .name.link:hover {
+        text-decoration: underline;
+      }
+
+      .name.link:focus-visible {
+        outline: 2px solid var(--uui-color-focus);
+        outline-offset: 2px;
       }
 
       .name {

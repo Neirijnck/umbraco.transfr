@@ -4,6 +4,17 @@ export type ClientOptions = {
     baseUrl: 'https://localhost:44361' | (string & {});
 };
 
+export type BlockDiffResponseModel = {
+    key: string;
+    status: string;
+    contentTypeKey?: string | null;
+    contentTypeName?: string | null;
+    localIndex?: number | null;
+    remoteIndex?: number | null;
+    values: Array<PropertyDiffResponseModel>;
+    settings: Array<PropertyDiffResponseModel>;
+};
+
 export type ConnectRemoteRequestModel = {
     name: string;
     baseUrl: string;
@@ -18,6 +29,22 @@ export type ContentDifferenceResponseModel = {
     segment?: string | null;
 };
 
+export type DocumentDiffResponseModel = {
+    isIdentical: boolean;
+    documentTypeName?: string | null;
+    fields: Array<FieldDiffResponseModel>;
+    properties: Array<PropertyDiffResponseModel>;
+};
+
+export type FieldDiffResponseModel = {
+    kind: string;
+    culture?: string | null;
+    segment?: string | null;
+    local?: string | null;
+    remote?: string | null;
+    differs: boolean;
+};
+
 export type ProblemDetails = {
     type?: string | null;
     title?: string | null;
@@ -25,6 +52,15 @@ export type ProblemDetails = {
     detail?: string | null;
     instance?: string | null;
     [key: string]: unknown;
+};
+
+export type PropertyDiffResponseModel = {
+    alias: string;
+    label: string;
+    culture?: string | null;
+    segment?: string | null;
+    editorAlias?: string | null;
+    value: ValueDiffResponseModel;
 };
 
 export type RemoteResponseModel = {
@@ -50,6 +86,22 @@ export type RemotesResponseModel = {
     remotes: Array<RemoteResponseModel>;
 };
 
+export type SchemaProblemResponseModel = {
+    kind: string;
+    key: string;
+    name?: string | null;
+    isElement: boolean;
+    reason: string;
+    details: Array<string>;
+};
+
+export type SeparateInstallResponseModel = {
+    alias: string;
+    name: string;
+    localKey: string;
+    remoteKey: string;
+};
+
 export type SubtreeLevelResponseModel = {
     parentKey?: string | null;
     rows: Array<TreeRowResponseModel>;
@@ -57,12 +109,14 @@ export type SubtreeLevelResponseModel = {
 
 export type SubtreeResponseModel = {
     levels: Array<SubtreeLevelResponseModel>;
+    separateInstall: Array<SeparateInstallResponseModel>;
     remoteRequests: number;
     truncated: boolean;
 };
 
 export type TreeLevelResponseModel = {
     rows: Array<TreeRowResponseModel>;
+    separateInstall: Array<SeparateInstallResponseModel>;
     remoteRequests: number;
 };
 
@@ -81,11 +135,21 @@ export type TreeRowResponseModel = {
     sameNameKey?: string | null;
     content?: TreeRowContentResponseModel | null;
     orderDiffers: boolean;
+    schemaProblems?: Array<SchemaProblemResponseModel> | null;
 };
 
 export type TreeSideResponseModel = {
     name: string;
     hasChildren: boolean;
+    documentTypeIcon?: string | null;
+    documentTypeName?: string | null;
+};
+
+export type ValueDiffResponseModel = {
+    differs: boolean;
+    local?: string | null;
+    remote?: string | null;
+    blocks: Array<BlockDiffResponseModel>;
 };
 
 export type GetRemotesData = {
@@ -182,6 +246,46 @@ export type DisconnectResponses = {
      */
     200: unknown;
 };
+
+export type DiffDocumentData = {
+    body?: never;
+    path: {
+        alias: string;
+        key: string;
+    };
+    query?: never;
+    url: '/umbraco/management/api/v1/transfr/remotes/{alias}/document/{key}/diff';
+};
+
+export type DiffDocumentErrors = {
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+    /**
+     * The authenticated user does not have access to this resource
+     */
+    403: unknown;
+    /**
+     * Not Found
+     */
+    404: ProblemDetails;
+    /**
+     * Bad Gateway
+     */
+    502: ProblemDetails;
+};
+
+export type DiffDocumentError = DiffDocumentErrors[keyof DiffDocumentErrors];
+
+export type DiffDocumentResponses = {
+    /**
+     * OK
+     */
+    200: DocumentDiffResponseModel;
+};
+
+export type DiffDocumentResponse = DiffDocumentResponses[keyof DiffDocumentResponses];
 
 export type GetStatusData = {
     body?: never;

@@ -1,3 +1,5 @@
+import { TRANSFR_NODE_DIFF_MODAL } from './node-diff-modal.token.js';
+
 export const TRANSFR_SECTION_ALIAS = 'Transfr.Section';
 
 export const manifests: Array<UmbExtensionManifest> = [
@@ -38,5 +40,11 @@ export const manifests: Array<UmbExtensionManifest> = [
       icon: 'icon-server',
     },
     conditions: [{ alias: 'Umb.Condition.SectionAlias', match: TRANSFR_SECTION_ALIAS }],
+  },
+  {
+    type: 'modal',
+    alias: TRANSFR_NODE_DIFF_MODAL.toString(),
+    name: 'Transfr Node Diff',
+    element: () => import('./node-diff-modal.element.js'),
   },
 ];
