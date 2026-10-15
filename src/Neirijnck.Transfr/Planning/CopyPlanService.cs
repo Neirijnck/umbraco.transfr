@@ -82,17 +82,19 @@ public sealed partial class CopyPlanService
         var (onTarget, locateRequests) = await this.remoteTree.LocateDocumentsAsync(remote, documentKeys, cancellationToken);
         requests += locateRequests;
 
-        // The target's children of every parent a new node would be created under: a namesake there blocks it.
+        // Every source's parent, on both sides: a namesake on the target blocks a new node, and the order here is where
+        // copied nodes are placed there. A parent that isn't on the target has no children there yet.
         var siblings = new List<TargetSibling>();
-        var newNodeParents = sources
-            .Where(source => !remoteJson.ContainsKey(source.Key) && (source.ParentKey is null || onTarget.ContainsKey(source.ParentKey.Value)))
-            .Select(source => source.ParentKey)
-            .Distinct();
-        foreach (var parentKey in newNodeParents)
+        var localSiblings = new List<LocalSibling>();
+        foreach (var parentKey in sources.Select(source => source.ParentKey).Distinct())
         {
-            var (children, readRequests) = await this.remoteTree.ReadLevelAsync(remote, parentKey, culture, cancellationToken);
-            requests += readRequests;
-            siblings.AddRange(children.Select(child => new TargetSibling(parentKey, child.Key, child.Name)));
+            localSiblings.AddRange(this.localTree.ReadLevel(parentKey, culture).Select(child => new LocalSibling(parentKey, child.Key)));
+            if (parentKey is null || onTarget.ContainsKey(parentKey.Value))
+            {
+                var (children, readRequests) = await this.remoteTree.ReadLevelAsync(remote, parentKey, culture, cancellationToken);
+                requests += readRequests;
+                siblings.AddRange(children.Select(child => new TargetSibling(parentKey, child.Key, child.Name)));
+            }
         }
 
         var documentTypes = sources.Select(source => DocumentTypeOf(source.Json)).OfType<Guid>().Distinct().ToList();
@@ -113,6 +115,7 @@ public sealed partial class CopyPlanService
             DocumentsOnTarget = onTarget.Keys.ToHashSet(),
             PublishedOnTarget = onTarget.Where(pair => pair.Value.IsPublished).Select(pair => pair.Key).ToHashSet(),
             TargetSiblings = siblings,
+            LocalSiblings = localSiblings,
             Schema = schema.Checks,
             LocalMedia = localMedia,
             MediaOnTarget = mediaOnTarget.Keys.ToHashSet(),
@@ -221,7 +224,7 @@ public sealed partial class CopyPlanService
         var notes = rows.SelectMany(row => row.Notes).Where(note => note.Key is not null).ToList();
         var documentKeys = notes
             .Where(note => note.Kind is PlanNoteKind.ParentMissingOnTarget or PlanNoteKind.ParentBlocked or PlanNoteKind.ParentNotPublished or PlanNoteKind.MissingReference
-                or PlanNoteKind.UnderAnotherParentOnTarget)
+                or PlanNoteKind.UnderAnotherParentOnTarget or PlanNoteKind.PlacedAfter)
             .Select(note => note.Key!.Value)
             .Distinct()
             .ToList();
@@ -233,7 +236,8 @@ public sealed partial class CopyPlanService
             names[key] = node.Name;
         }
 
-        foreach (var note in notes.Where(note => note.Kind == PlanNoteKind.SameNameOtherKey))
+        // A namesake is only on the target; a node to be placed after may be too.
+        foreach (var note in notes.Where(note => note.Kind is PlanNoteKind.SameNameOtherKey or PlanNoteKind.PlacedAfter))
         {
             if (siblings.FirstOrDefault(sibling => sibling.Key == note.Key) is { } namesake)
             {

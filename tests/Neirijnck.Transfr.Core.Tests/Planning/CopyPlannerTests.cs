@@ -86,6 +86,7 @@ public sealed class CopyPlannerTests
         Guid[]? onTarget = null,
         Guid[]? published = null,
         TargetSibling[]? siblings = null,
+        LocalSibling[]? localSiblings = null,
         SchemaCheck[]? schema = null,
         LocalMediaItem[]? localMedia = null,
         Guid[]? mediaOnTarget = null,
@@ -97,6 +98,7 @@ public sealed class CopyPlannerTests
             DocumentsOnTarget = (onTarget ?? [Home]).ToHashSet(),
             PublishedOnTarget = (published ?? onTarget ?? [Home]).ToHashSet(),
             TargetSiblings = siblings ?? [],
+            LocalSiblings = localSiblings ?? [],
             Schema = (schema ?? [Ok(PageType), Ok(OtherType)]).ToDictionary(check => check.DocumentTypeKey),
             LocalMedia = (localMedia ?? []).ToDictionary(item => item.Key),
             MediaOnTarget = (mediaOnTarget ?? []).ToHashSet(),
@@ -350,6 +352,56 @@ public sealed class CopyPlannerTests
         var row = Single(Facts([Source(Page, Document(variants: [(null, "Draft")]), Home)], published: []));
 
         Assert.Empty(row.Notes);
+    }
+
+    private static TargetSibling[] OnTarget(Guid? parent, params Guid[] keys) => [.. keys.Select(key => new TargetSibling(parent, key, key.ToString()))];
+
+    private static LocalSibling[] Here(Guid? parent, params Guid[] keys) => [.. keys.Select(key => new LocalSibling(parent, key))];
+
+    [Fact]
+    public void Plan_PlacesANewNodeAfterItsPredecessorHere_NotAtTheEnd()
+    {
+        var row = Single(Facts([Source(Page, Document(), Home)], siblings: OnTarget(Home, Other, Third), localSiblings: Here(Home, Other, Page, Third)));
+
+        Assert.Equal(PlanOutcome.Create, row.Outcome);
+        Assert.Equal([new PlanNote(PlanNoteKind.PlacedAfter, Other)], row.Notes);
+    }
+
+    [Fact]
+    public void Plan_SaysNothingAboutANewNodeThatIsLastHereToo()
+    {
+        var row = Single(Facts([Source(Page, Document(), Home)], siblings: OnTarget(Home, Other), localSiblings: Here(Home, Other, Page)));
+
+        Assert.Empty(row.Notes);
+    }
+
+    [Fact]
+    public void Plan_PlacesAnUnchangedNodeThatIsInAnotherPlace_AndFirstWhenItIsFirstHere()
+    {
+        var rows = CopyPlanner.Plan(Facts(
+            [Source(Page, Document(), Home), Source(Third, Document(), Home, "Third")],
+            targets: new() { [Page] = new(Home, Document()), [Third] = new(Home, Document()) },
+            onTarget: [Home, Page, Third],
+            siblings: OnTarget(Home, Page, Other, Third),
+            localSiblings: Here(Home, Third, Other, Page)));
+
+        Assert.Equal([new PlanNote(PlanNoteKind.PlacedAfter, Other)], RowOf(rows, Page).Notes);
+        Assert.Equal([new PlanNote(PlanNoteKind.PlacedAfter, null)], RowOf(rows, Third).Notes);
+        Assert.All(rows, row => Assert.Equal(PlanOutcome.Unchanged, row.Outcome));
+    }
+
+    [Fact]
+    public void Plan_DoesNotPlaceASkippedConflict_OrANodeUnderAnotherParentOnTheTarget()
+    {
+        var rows = CopyPlanner.Plan(Facts(
+            [Source(Page, Document(title: "New"), Home), Source(Third, Document(), Home, "Third")],
+            targets: new() { [Page] = new(Home, Document(title: "Old")), [Third] = new(Other, Document()) },
+            onTarget: [Home, Page, Third, Other],
+            siblings: OnTarget(Home, Page, Other),
+            localSiblings: Here(Home, Other, Page, Third)));
+
+        Assert.Equal(PlanOutcome.Conflict, RowOf(rows, Page).Outcome);
+        Assert.DoesNotContain(rows.SelectMany(row => row.Notes), note => note.Kind == PlanNoteKind.PlacedAfter);
     }
 
     [Fact]

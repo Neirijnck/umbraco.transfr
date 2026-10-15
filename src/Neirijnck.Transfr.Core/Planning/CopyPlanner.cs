@@ -60,7 +60,39 @@ public static class CopyPlanner
                 || (row.Outcome != PlanOutcome.Blocked && row.PublishCultures.Count > 0);
         }
 
-        return [.. MediaRows(documentRows, sources, facts), .. documentRows];
+        return [.. MediaRows(documentRows, sources, facts), .. PlaceAmongSiblings(documentRows, sources, facts)];
+    }
+
+    /// <summary>
+    /// The nodes in each parent's place on the target take their order from here (<see cref="SiblingOrder"/>). A node
+    /// whose predecessor changes gets a note. Skipped conflicts, blocked nodes and nodes under another parent on the
+    /// target don't move (a copy never moves a node to another parent).
+    /// </summary>
+    private static List<PlanRow> PlaceAmongSiblings(List<PlanRow> rows, Dictionary<Guid, Source> sources, CopyPlanFacts facts)
+    {
+        var placed = new Dictionary<Guid, PlanNote>();
+        var moving = rows
+            .Where(row => row.Outcome is PlanOutcome.Create or PlanOutcome.Update or PlanOutcome.Unchanged)
+            .Where(row => sources[row.Key].Target is not { } target || target.ParentKey == row.ParentKey);
+        foreach (var group in moving.GroupBy(row => row.ParentKey))
+        {
+            var targetOrder = facts.TargetSiblings.Where(sibling => sibling.ParentKey == group.Key).Select(sibling => sibling.Key).ToList();
+            var localOrder = facts.LocalSiblings.Where(sibling => sibling.ParentKey == group.Key).Select(sibling => sibling.Key).ToList();
+            var newOrder = SiblingOrder.Place(targetOrder, localOrder, group.Select(row => row.Key).ToHashSet());
+
+            // Without a sort, a created node would end up last.
+            var unsorted = targetOrder.Concat(group.Where(row => row.Outcome == PlanOutcome.Create).Select(row => row.Key)).ToList();
+            foreach (var row in group)
+            {
+                var after = SiblingOrder.PredecessorOf(newOrder, row.Key);
+                if (after != SiblingOrder.PredecessorOf(unsorted, row.Key))
+                {
+                    placed[row.Key] = new PlanNote(PlanNoteKind.PlacedAfter, after);
+                }
+            }
+        }
+
+        return rows.Select(row => placed.TryGetValue(row.Key, out var note) ? row with { Notes = [.. row.Notes, note] } : row).ToList();
     }
 
     private static Source Read(SourceDocument document, CopyPlanFacts facts)

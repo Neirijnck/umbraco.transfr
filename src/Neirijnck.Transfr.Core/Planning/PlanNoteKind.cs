@@ -50,6 +50,12 @@ public enum PlanNoteKind
     /// <summary>The target's node lives under another parent: a copy never moves, so it is updated where it is.</summary>
     UnderAnotherParentOnTarget,
 
+    /// <summary>
+    /// The node takes another place among its siblings on the target, the one it has here: right after the node in Key
+    /// (null = first).
+    /// </summary>
+    PlacedAfter,
+
     /// <summary>A referenced media item doesn't exist here either: the reference is copied as it is.</summary>
     MediaMissingHere,
 }

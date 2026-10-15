@@ -83,6 +83,11 @@ describe('describeNote', () => {
     [note('DraftOnly'), 'The content has unpublished changes here: the draft is copied, not published.'],
     [note('UnderAnotherParentOnTarget', { name: 'News' }), 'It lives under "News" on B: updated there, not moved.'],
     [
+      note('PlacedAfter', { key: 'k', name: 'News' }),
+      'It takes its place here among its siblings on B: right after "News".',
+    ],
+    [note('PlacedAfter'), 'It takes its place here among its siblings on B: first.'],
+    [
       note('ParentNotPublished', { name: 'News' }),
       'Its parent "News" isn\'t published on B: it is saved as a draft, not published.',
     ],

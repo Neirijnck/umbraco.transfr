@@ -89,6 +89,10 @@ export function describeNote(note: PlanNoteResponseModel, remoteName: string): s
       return `${culture} is published on ${remoteName} but not here: it stays published, a copy never unpublishes.`;
     case 'ParentNotPublished':
       return `Its parent ${item} isn't published on ${remoteName}: it is saved as a draft, not published.`;
+    case 'PlacedAfter':
+      return note.key
+        ? `It takes its place here among its siblings on ${remoteName}: right after ${item}.`
+        : `It takes its place here among its siblings on ${remoteName}: first.`;
     case 'UnderAnotherParentOnTarget':
       return `It lives under ${item} on ${remoteName}: updated there, not moved.`;
     case 'MediaMissingHere':

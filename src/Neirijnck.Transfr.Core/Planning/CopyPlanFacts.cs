@@ -25,8 +25,14 @@ public sealed class CopyPlanFacts
     /// </summary>
     public required IReadOnlySet<Guid> PublishedOnTarget { get; init; }
 
-    /// <summary>The target's children of every parent a source would be created under (for namesakes).</summary>
+    /// <summary>
+    /// The target's children of every source's parent there, in sort order: namesakes block a new node, and the order is
+    /// where copied nodes are placed.
+    /// </summary>
     public required IReadOnlyList<TargetSibling> TargetSiblings { get; init; }
+
+    /// <summary>The children here of every source's parent, in sort order.</summary>
+    public required IReadOnlyList<LocalSibling> LocalSiblings { get; init; }
 
     /// <summary>The schema check of each source's document type, by document type key.</summary>
     public required IReadOnlyDictionary<Guid, SchemaCheck> Schema { get; init; }
