@@ -4,6 +4,7 @@ import type {
   PlanRowResponseModel,
   RemoteChangeResponseModel,
 } from '../api/index.js';
+import { formatWhen } from './format-when.js';
 
 export type OutcomeLook = {
   label: string;
@@ -88,10 +89,6 @@ export function describeRemoteChange(change: RemoteChangeResponseModel, remoteNa
  */
 export function describeLastCopy(copy: LastCopyResponseModel, remoteName: string, timeZone?: string): string {
   return `Last copied to ${remoteName}${copy.by ? ` by ${copy.by}` : ''}, ${formatWhen(copy.at, timeZone)}`;
-}
-
-function formatWhen(at: string, timeZone: string | undefined): string {
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(new Date(at));
 }
 
 /** One note in words, naming the remote, the item and the property it is about. */

@@ -181,6 +181,23 @@ export type SubtreeResponseModel = {
     truncated: boolean;
 };
 
+export type TransferHistoryDocumentResponseModel = {
+    key: string;
+    name?: string | null;
+    outcome: string;
+};
+
+export type TransferHistoryItemResponseModel = {
+    at: string;
+    by?: string | null;
+    documents: Array<TransferHistoryDocumentResponseModel>;
+};
+
+export type TransferHistoryResponseModel = {
+    transfers: Array<TransferHistoryItemResponseModel>;
+    nextBefore?: number | null;
+};
+
 export type TransferRequestModel = {
     selection: Array<PlanSelectionRequestModel>;
     dryRun: Array<DryRunRowRequestModel>;
@@ -379,6 +396,48 @@ export type DiffDocumentResponses = {
 };
 
 export type DiffDocumentResponse = DiffDocumentResponses[keyof DiffDocumentResponses];
+
+export type GetHistoryData = {
+    body?: never;
+    path: {
+        alias: string;
+    };
+    query?: {
+        before?: number;
+        take?: number;
+    };
+    url: '/umbraco/management/api/v1/transfr/remotes/{alias}/history';
+};
+
+export type GetHistoryErrors = {
+    /**
+     * Bad Request
+     */
+    400: ProblemDetails;
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+    /**
+     * The authenticated user does not have access to this resource
+     */
+    403: unknown;
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type GetHistoryError = GetHistoryErrors[keyof GetHistoryErrors];
+
+export type GetHistoryResponses = {
+    /**
+     * OK
+     */
+    200: TransferHistoryResponseModel;
+};
+
+export type GetHistoryResponse = GetHistoryResponses[keyof GetHistoryResponses];
 
 export type PlanCopyData = {
     body?: CopyPlanRequestModel;

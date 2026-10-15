@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CompareSubtreeData, CompareSubtreeErrors, CompareSubtreeResponses, CompareTreeLevelData, CompareTreeLevelErrors, CompareTreeLevelResponses, ConnectData, ConnectErrors, ConnectResponses, DiffDocumentData, DiffDocumentErrors, DiffDocumentResponses, DisconnectData, DisconnectErrors, DisconnectResponses, GetRemotesData, GetRemotesErrors, GetRemotesResponses, GetStatusData, GetStatusErrors, GetStatusResponses, PlanCopyData, PlanCopyErrors, PlanCopyResponses, TransferData, TransferErrors, TransferResponses } from './types.gen';
+import type { CompareSubtreeData, CompareSubtreeErrors, CompareSubtreeResponses, CompareTreeLevelData, CompareTreeLevelErrors, CompareTreeLevelResponses, ConnectData, ConnectErrors, ConnectResponses, DiffDocumentData, DiffDocumentErrors, DiffDocumentResponses, DisconnectData, DisconnectErrors, DisconnectResponses, GetHistoryData, GetHistoryErrors, GetHistoryResponses, GetRemotesData, GetRemotesErrors, GetRemotesResponses, GetStatusData, GetStatusErrors, GetStatusResponses, PlanCopyData, PlanCopyErrors, PlanCopyResponses, TransferData, TransferErrors, TransferResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -51,6 +51,14 @@ export class TransfrService {
         return (options.client ?? client).get<DiffDocumentResponses, DiffDocumentErrors, ThrowOnError>({
             security: [{ scheme: 'bearer', type: 'http' }],
             url: '/umbraco/management/api/v1/transfr/remotes/{alias}/document/{key}/diff',
+            ...options
+        });
+    }
+    
+    public static getHistory<ThrowOnError extends boolean = false>(options: Options<GetHistoryData, ThrowOnError>): RequestResult<GetHistoryResponses, GetHistoryErrors, ThrowOnError> {
+        return (options.client ?? client).get<GetHistoryResponses, GetHistoryErrors, ThrowOnError>({
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/umbraco/management/api/v1/transfr/remotes/{alias}/history',
             ...options
         });
     }

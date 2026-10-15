@@ -31,6 +31,19 @@ export const manifests: Array<UmbExtensionManifest> = [
   },
   {
     type: 'sectionView',
+    alias: 'Transfr.SectionView.History',
+    name: 'Transfr History',
+    weight: 150,
+    element: () => import('./history.element.js'),
+    meta: {
+      label: 'History',
+      pathname: 'history',
+      icon: 'icon-history',
+    },
+    conditions: [{ alias: 'Umb.Condition.SectionAlias', match: TRANSFR_SECTION_ALIAS }],
+  },
+  {
+    type: 'sectionView',
     alias: 'Transfr.SectionView.Remotes',
     name: 'Transfr Remotes',
     weight: 100,
