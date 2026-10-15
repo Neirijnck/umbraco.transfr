@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Neirijnck.Transfr.Compare;
@@ -33,6 +34,7 @@ public sealed partial class CopyPlanService
     private readonly SchemaCheckService schemaChecks;
     private readonly LocalSchemaNames schemaNames;
     private readonly CopyHistoryStore history;
+    private readonly RemoteAuditReader audit;
     private readonly ILanguageService languageService;
     private readonly ILogger<CopyPlanService> logger;
 
@@ -44,6 +46,7 @@ public sealed partial class CopyPlanService
         SchemaCheckService schemaChecks,
         LocalSchemaNames schemaNames,
         CopyHistoryStore history,
+        RemoteAuditReader audit,
         ILanguageService languageService,
         ILogger<CopyPlanService> logger)
     {
@@ -54,6 +57,7 @@ public sealed partial class CopyPlanService
         this.schemaChecks = schemaChecks;
         this.schemaNames = schemaNames;
         this.history = history;
+        this.audit = audit;
         this.languageService = languageService;
         this.logger = logger;
     }
@@ -128,7 +132,15 @@ public sealed partial class CopyPlanService
             Baseline = this.history.LatestTargetUpdates(remote, sources.Select(source => source.Key).ToList()),
         });
 
-        var result = this.Describe(rows, siblings, localMedia, schema, culture, requests) with { SourceJson = sources.ToDictionary(source => source.Key, source => source.Json) };
+        var conflicts = rows.Where(row => row.Kind == PlanItemKind.Document && row.Outcome == PlanOutcome.Conflict).Select(row => row.Key).ToList();
+        var (changes, changeRequests) = await this.ReadRemoteChangesAsync(remote, conflicts, cancellationToken);
+        requests += changeRequests;
+
+        var result = this.Describe(rows, siblings, localMedia, schema, culture, requests) with
+        {
+            SourceJson = sources.ToDictionary(source => source.Key, source => source.Json),
+            RemoteChanges = changes,
+        };
         var create = rows.Count(row => row.Outcome == PlanOutcome.Create);
         var conflict = rows.Count(row => row.Outcome == PlanOutcome.Conflict);
         var blocked = rows.Count(row => row.Outcome == PlanOutcome.Blocked);
@@ -217,6 +229,62 @@ public sealed partial class CopyPlanService
         return found;
     }
 
+    // Who last changed each conflicting document on the remote. Only an explanation: a read that fails is logged and
+    // left out, never failing the plan.
+    private async Task<(IReadOnlyDictionary<Guid, RemoteChangeInfo> Changes, int Requests)> ReadRemoteChangesAsync(
+        RemoteDefinition remote,
+        List<Guid> keys,
+        CancellationToken cancellationToken)
+    {
+        if (keys.Count == 0)
+        {
+            return (new Dictionary<Guid, RemoteChangeInfo>(), 0);
+        }
+
+        var found = new ConcurrentDictionary<Guid, RemoteChange>();
+        var options = new ParallelOptions { MaxDegreeOfParallelism = MaxParallelDocumentRequests, CancellationToken = cancellationToken };
+        await Parallel.ForEachAsync(keys, options, async (key, token) =>
+        {
+            try
+            {
+                if (await this.audit.LastChangeAsync(remote, key, token) is { } change)
+                {
+                    found[key] = change;
+                }
+            }
+            catch (Exception exception) when (IsUnreadable(exception, token))
+            {
+                LogChangeUnread(this.logger, exception, remote.Alias, key);
+            }
+        });
+
+        var requests = keys.Count;
+        IReadOnlyDictionary<Guid, string> names = new Dictionary<Guid, string>();
+        if (!found.IsEmpty)
+        {
+            try
+            {
+                (names, var nameRequests) = await this.audit.UserNamesAsync(remote, found.Values.Select(change => change.UserKey).ToList(), cancellationToken);
+                requests += nameRequests;
+            }
+            catch (Exception exception) when (IsUnreadable(exception, cancellationToken))
+            {
+                LogUserNamesUnread(this.logger, exception, remote.Alias);
+            }
+        }
+
+        var changes = found.ToDictionary(
+            pair => pair.Key,
+            pair => new RemoteChangeInfo(names.GetValueOrDefault(pair.Value.UserKey), pair.Value.At, pair.Value.LogType));
+        return (changes, requests);
+    }
+
+
+    // A refused or failed remote read, an unexpected answer, or a timeout; not the caller cancelling.
+    private static bool IsUnreadable(Exception exception, CancellationToken cancellationToken)
+        => exception is HttpRequestException or JsonException or InvalidOperationException or RemoteAuthenticationException
+            || (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested);
+
     private CopyPlanResult Describe(
         IReadOnlyList<PlanRow> rows,
         IReadOnlyList<TargetSibling> siblings,
@@ -275,7 +343,15 @@ public sealed partial class CopyPlanService
             .Select(note => note.Key!.Value)
             .ToHashSet();
 
-        return new CopyPlanResult(rows, names, selectable, documentTypes, schema.SeparateInstall, requests, new Dictionary<Guid, string>());
+        return new CopyPlanResult(
+            rows,
+            names,
+            selectable,
+            documentTypes,
+            schema.SeparateInstall,
+            requests,
+            new Dictionary<Guid, string>(),
+            new Dictionary<Guid, RemoteChangeInfo>());
     }
 
     private static Guid? DocumentTypeOf(string documentJson)
@@ -283,4 +359,10 @@ public sealed partial class CopyPlanService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Planned a copy to remote {Alias}: {Rows} rows ({Create} to create, {Conflict} conflicts, {Blocked} blocked), {Requests} remote requests, {Milliseconds} ms")]
     private static partial void LogPlanned(ILogger logger, string alias, int rows, int create, int conflict, int blocked, int requests, long milliseconds);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not read who last changed document {Key} on remote {Alias}")]
+    private static partial void LogChangeUnread(ILogger logger, Exception exception, string alias, Guid key);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not read user names on remote {Alias}")]
+    private static partial void LogUserNamesUnread(ILogger logger, Exception exception, string alias);
 }

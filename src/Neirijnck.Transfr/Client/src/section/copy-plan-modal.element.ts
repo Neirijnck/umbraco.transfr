@@ -11,7 +11,14 @@ import type {
 } from '../api/index.js';
 import { summarizeDifferences } from './content-summary.js';
 import type { TransfrCopyPlanModalData, TransfrCopyPlanModalValue } from './copy-plan-modal.token.js';
-import { OUTCOMES, countOutcomes, describeNote, describePublish, outcomeLook } from './plan-view.js';
+import {
+  OUTCOMES,
+  countOutcomes,
+  describeNote,
+  describePublish,
+  describeRemoteChange,
+  outcomeLook,
+} from './plan-view.js';
 import { problemMessage } from './problem.js';
 import { describeSchemaProblem, describeSeparateInstall } from './schema-view.js';
 import { addToSelection, describeSelection, fromRequest, toRequest } from './selection.js';
@@ -322,6 +329,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
           >
         </div>
         ${differs ? html`<div class="line">Differs on ${remote}: ${differs}</div>` : nothing}
+        ${row.changedOnRemote ? html`<div class="line">${describeRemoteChange(row.changedOnRemote, remote)}</div>` : nothing}
         ${publish ? html`<div class="line">${publish}</div>` : nothing}
         ${
           row.kind === 'Document' && row.outcome === 'Conflict'

@@ -92,6 +92,7 @@ export type PlanRowResponseModel = {
     differences: Array<ContentDifferenceResponseModel>;
     schemaProblems: Array<SchemaProblemResponseModel>;
     fingerprint?: string | null;
+    changedOnRemote?: RemoteChangeResponseModel | null;
 };
 
 export type PlanSelectionRequestModel = {
@@ -115,6 +116,12 @@ export type PropertyDiffResponseModel = {
     segment?: string | null;
     editorAlias?: string | null;
     value: ValueDiffResponseModel;
+};
+
+export type RemoteChangeResponseModel = {
+    by?: string | null;
+    at: string;
+    what: string;
 };
 
 export type RemoteResponseModel = {

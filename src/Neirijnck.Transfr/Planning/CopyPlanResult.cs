@@ -14,6 +14,7 @@ namespace Neirijnck.Transfr.Planning;
 /// <param name="SeparateInstall">Evidence that the remote was installed separately (empty when there is none).</param>
 /// <param name="RemoteRequests">Requests it cost on the remote.</param>
 /// <param name="SourceJson">The JSON here of every planned document, by key: what a transfer writes.</param>
+/// <param name="RemoteChanges">Who last changed each conflicting document on the remote, where that could be read.</param>
 public sealed record CopyPlanResult(
     IReadOnlyList<PlanRow> Rows,
     IReadOnlyDictionary<Guid, string> Names,
@@ -21,4 +22,5 @@ public sealed record CopyPlanResult(
     IReadOnlyDictionary<Guid, ContentTypeNames> DocumentTypes,
     IReadOnlyList<SeparateInstallEvidence> SeparateInstall,
     int RemoteRequests,
-    IReadOnlyDictionary<Guid, string> SourceJson);
+    IReadOnlyDictionary<Guid, string> SourceJson,
+    IReadOnlyDictionary<Guid, RemoteChangeInfo> RemoteChanges);

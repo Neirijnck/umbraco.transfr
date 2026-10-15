@@ -1,4 +1,4 @@
-import type { PlanNoteResponseModel, PlanRowResponseModel } from '../api/index.js';
+import type { PlanNoteResponseModel, PlanRowResponseModel, RemoteChangeResponseModel } from '../api/index.js';
 
 export type OutcomeLook = {
   label: string;
@@ -54,6 +54,30 @@ export function describePublish(row: PlanRowResponseModel): string | undefined {
 
   const named = cultures.filter((culture): culture is string => culture !== null);
   return named.length === 0 ? 'Published' : `Published in ${named.join(', ')}`;
+}
+
+// Audit log types (Umbraco's AuditType) as a verb; any other type is shown as the remote names it.
+const CHANGE_VERBS: Readonly<Record<string, string>> = {
+  New: 'created',
+  Save: 'saved',
+  SaveVariant: 'saved',
+  Publish: 'published',
+  PublishVariant: 'published',
+  Unpublish: 'unpublished',
+  UnpublishVariant: 'unpublished',
+  RollBack: 'rolled back',
+};
+
+/**
+ * Who last changed a conflicting document on the remote, e.g. "Last saved on Test site B by Transfr Admin, 15 Oct
+ * 2026, 12:25". The time is shown in the viewer's zone unless one is named.
+ */
+export function describeRemoteChange(change: RemoteChangeResponseModel, remoteName: string, timeZone?: string): string {
+  const verb = CHANGE_VERBS[change.what] ?? change.what;
+  const at = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(
+    new Date(change.at),
+  );
+  return `Last ${verb} on ${remoteName}${change.by ? ` by ${change.by}` : ''}, ${at}`;
 }
 
 /** One note in words, naming the remote, the item and the property it is about. */

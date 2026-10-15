@@ -29,7 +29,8 @@ internal static class PlanResponses
             row.PublishCultures,
             row.Differences.Select(ResponseMapping.From).ToList(),
             row.SchemaProblems.Select(ResponseMapping.From).ToList(),
-            row.Fingerprint);
+            row.Fingerprint,
+            result.RemoteChanges.GetValueOrDefault(row.Key) is { } change ? new RemoteChangeResponseModel(change.By, change.At, change.What) : null);
     }
 
     private static PlanNoteResponseModel Note(PlanNote note, ContentTypeNames? type, CopyPlanResult result)

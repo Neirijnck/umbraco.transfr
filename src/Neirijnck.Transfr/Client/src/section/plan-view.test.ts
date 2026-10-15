@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanNoteResponseModel, PlanRowResponseModel } from '../api/index.js';
-import { countOutcomes, describeNote, describePublish, outcomeLook } from './plan-view.js';
+import { countOutcomes, describeNote, describePublish, describeRemoteChange, outcomeLook } from './plan-view.js';
 
 const row = (outcome: string, publishCultures: Array<string | null> = [], kind = 'Document'): PlanRowResponseModel => ({
   kind,
@@ -30,6 +30,26 @@ describe('outcomeLook', () => {
 
   it('never shows an unknown outcome as harmless', () => {
     expect(outcomeLook('Delete')).toMatchObject({ label: 'Delete', color: 'danger' });
+  });
+});
+
+describe('describeRemoteChange', () => {
+  // A summer time in Brussels (UTC+2), as the remote sends it.
+  const at = '2026-10-15T10:25:13.0861+00:00';
+
+  it('names the change, the remote, the user and the time in the given zone', () => {
+    expect(describeRemoteChange({ by: 'Transfr Remote', at, what: 'Save' }, 'Test site B', 'Europe/Brussels')).toBe(
+      'Last saved on Test site B by Transfr Remote, 15 Oct 2026, 12:25',
+    );
+    expect(describeRemoteChange({ by: 'Transfr Admin', at, what: 'PublishVariant' }, 'Test site B', 'UTC')).toBe(
+      'Last published on Test site B by Transfr Admin, 15 Oct 2026, 10:25',
+    );
+  });
+
+  it('leaves out a user it has no name for, and shows an unknown change as named', () => {
+    expect(describeRemoteChange({ at, what: 'Copy' }, 'Test site B', 'UTC')).toBe(
+      'Last Copy on Test site B, 15 Oct 2026, 10:25',
+    );
   });
 });
 

@@ -27,6 +27,7 @@ public class TransfrRemoteComposer : IComposer
         builder.Services.AddSingleton<RemoteClient>();
         builder.Services.AddSingleton<RemoteTreeReader>();
         builder.Services.AddSingleton<RemoteDocumentReader>();
+        builder.Services.AddSingleton<RemoteAuditReader>();
         builder.Services.AddSingleton<LocalTreeReader>();
         builder.Services.AddSingleton<LocalDocumentReader>();
         builder.Services.AddSingleton<LocalSchemaNames>();
