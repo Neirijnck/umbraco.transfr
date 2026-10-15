@@ -9,6 +9,7 @@ import type {
   TransferHistoryDocumentResponseModel,
   TransferHistoryItemResponseModel,
 } from '../api/index.js';
+import { brandStyles } from './brand.js';
 import { describeTransferHeadline, outcomeWord, summarizeTransfer } from './history-view.js';
 import { TRANSFR_NODE_DIFF_MODAL } from './node-diff-modal.token.js';
 import { problemMessage } from './problem.js';
@@ -231,6 +232,7 @@ export class TransfrHistoryElement extends UmbLitElement {
   }
 
   static override styles = [
+    brandStyles,
     css`
       :host {
         display: block;
@@ -260,6 +262,7 @@ export class TransfrHistoryElement extends UmbLitElement {
       .transfer {
         background: var(--uui-color-surface);
         border: 1px solid var(--uui-color-border);
+        border-left: 4px solid var(--transfr-color-remote);
         border-radius: var(--uui-border-radius);
         padding: var(--uui-size-space-4) var(--uui-size-space-5);
       }
@@ -273,6 +276,10 @@ export class TransfrHistoryElement extends UmbLitElement {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--uui-size-space-3);
+      }
+
+      .head umb-icon {
+        color: var(--transfr-color-remote);
       }
 
       .head small {

@@ -8,6 +8,7 @@ import type {
   PropertyDiffResponseModel,
   ValueDiffResponseModel,
 } from '../api/index.js';
+import { brandStyles } from './brand.js';
 import { blockStatusLabel, fieldLabel, fieldValue } from './diff-labels.js';
 import type { TransfrNodeDiffModalData } from './node-diff-modal.token.js';
 import { problemMessage } from './problem.js';
@@ -137,8 +138,8 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<TransfrNode
   #renderHead(remote: string) {
     return html`<div class="columns row head" aria-hidden="true">
       <span></span>
-      <span><umb-icon name="icon-home"></umb-icon>This environment</span>
-      <span><umb-icon name="icon-cloud"></umb-icon>${remote}</span>
+      <span><umb-icon class="local" name="icon-home"></umb-icon>This environment</span>
+      <span><umb-icon class="remote" name="icon-cloud"></umb-icon>${remote}</span>
     </div>`;
   }
 
@@ -239,6 +240,7 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<TransfrNode
   }
 
   static override styles = [
+    brandStyles,
     css`
       .toolbar {
         display: flex;
@@ -300,6 +302,14 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<TransfrNode
         display: flex;
         align-items: center;
         gap: var(--uui-size-space-2);
+      }
+
+      .head umb-icon.local {
+        color: var(--transfr-color-local);
+      }
+
+      .head umb-icon.remote {
+        color: var(--transfr-color-remote);
       }
 
       .row {

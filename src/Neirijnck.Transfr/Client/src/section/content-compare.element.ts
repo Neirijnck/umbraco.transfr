@@ -11,6 +11,7 @@ import type {
   TreeRowResponseModel,
 } from '../api/index.js';
 import { umbOpenModal } from '@umbraco-cms/backoffice/modal';
+import { brandStyles } from './brand.js';
 import { describeDifference, summarizeDifferences } from './content-summary.js';
 import { TRANSFR_COPY_PLAN_MODAL } from './copy-plan-modal.token.js';
 import { TRANSFR_NODE_DIFF_MODAL } from './node-diff-modal.token.js';
@@ -849,6 +850,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
   }
 
   static override styles = [
+    brandStyles,
     css`
       :host {
         --transfr-step: var(--uui-size-space-6);
@@ -877,7 +879,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
         gap: var(--uui-size-space-3);
         margin-bottom: var(--uui-size-space-5);
         padding: var(--uui-size-space-3) var(--uui-size-space-5);
-        border-left: 4px solid var(--uui-color-selected);
+        border-left: 4px solid var(--transfr-color-brand);
         border-radius: var(--uui-border-radius);
         background: var(--uui-color-surface);
       }
@@ -942,17 +944,22 @@ export class TransfrContentCompareElement extends UmbLitElement {
         gap: var(--uui-size-space-3);
         padding: var(--uui-size-space-4) var(--uui-size-space-5);
         border-radius: var(--uui-border-radius) var(--uui-border-radius) 0 0;
-        border-top: 4px solid var(--uui-color-interactive);
+        border-top: 4px solid var(--transfr-color-local);
         background: var(--uui-color-surface-alt);
         margin-bottom: var(--uui-size-space-2);
       }
 
       .pane-head.remote {
-        border-top-color: var(--uui-color-current);
+        border-top-color: var(--transfr-color-remote);
       }
 
       .pane-head umb-icon {
         font-size: 1.5em;
+        color: var(--transfr-color-local);
+      }
+
+      .pane-head.remote umb-icon {
+        color: var(--transfr-color-remote);
       }
 
       .pane-head div {
@@ -1031,7 +1038,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
         width: var(--uui-size-5);
         height: var(--uui-size-5);
         margin: 0;
-        accent-color: var(--uui-color-selected);
+        accent-color: var(--transfr-color-accent);
         cursor: pointer;
       }
 

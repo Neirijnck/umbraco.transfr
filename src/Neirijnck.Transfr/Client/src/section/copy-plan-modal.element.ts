@@ -9,6 +9,7 @@ import type {
   TransferResponseModel,
   TransferRowResponseModel,
 } from '../api/index.js';
+import { brandStyles } from './brand.js';
 import { summarizeDifferences } from './content-summary.js';
 import type { TransfrCopyPlanModalData, TransfrCopyPlanModalValue } from './copy-plan-modal.token.js';
 import {
@@ -389,6 +390,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
   }
 
   static override styles = [
+    brandStyles,
     css`
       .intro,
       .notice {
@@ -397,7 +399,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
         gap: var(--uui-size-space-3);
         margin-bottom: var(--uui-size-space-5);
         padding: var(--uui-size-space-3) var(--uui-size-space-5);
-        border-left: 4px solid var(--uui-color-selected);
+        border-left: 4px solid var(--transfr-color-brand);
         border-radius: var(--uui-border-radius);
         background: var(--uui-color-surface);
       }
