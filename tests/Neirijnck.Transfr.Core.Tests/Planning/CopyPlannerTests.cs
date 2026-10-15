@@ -405,6 +405,21 @@ public sealed class CopyPlannerTests
     }
 
     [Fact]
+    public void Plan_FingerprintsBothSides_SoASaveOnEitherSideChangesIt()
+    {
+        string FingerprintOf(string source, string? target)
+            => Single(Facts([Source(Page, source, Home)], targets: target is null ? null : new() { [Page] = new(Home, target) })).Fingerprint!;
+
+        var created = FingerprintOf(Document(), null);
+        var updated = FingerprintOf(Document(), Document(title: "Old"));
+
+        Assert.Equal($"{DateTimeOffset.Parse(Updated, System.Globalization.CultureInfo.InvariantCulture):O}|absent", created);
+        Assert.NotEqual(updated, FingerprintOf(Document(updateDate: "2026-10-14T12:00:00+02:00"), Document(title: "Old")));
+        Assert.NotEqual(updated, FingerprintOf(Document(), Document(title: "Old", updateDate: "2026-10-14T12:00:00+02:00")));
+        Assert.Equal(updated, FingerprintOf(Document(title: "Changed but not saved again"), Document(title: "Old")));
+    }
+
+    [Fact]
     public void Plan_SavesADraftOnlyNodeWithoutPublishing()
     {
         var row = Single(Facts([Source(Page, Document(variants: [(null, "Draft")]), Home)]));

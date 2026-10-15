@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Nodes;
+﻿using System.Globalization;
+using System.Text.Json.Nodes;
 
 namespace Neirijnck.Transfr.Core.Content;
 
@@ -35,6 +36,12 @@ internal static class DocumentJson
 
     public static (string? Culture, string? Segment) CultureAndSegment(JsonObject? entry)
         => (StringOf(entry?["culture"]), StringOf(entry?["segment"]));
+
+    /// <summary>The last save of any variant (null when no variant carries a date).</summary>
+    public static DateTimeOffset? LastUpdate(JsonObject document)
+        => Entries(document["variants"], withAlias: false)
+            .Select(variant => DateTimeOffset.TryParse(StringOf(variant.Entry["updateDate"]), CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : (DateTimeOffset?)null)
+            .Max();
 
     /// <summary>
     /// Variants by culture and segment, or values by alias, culture and segment, in the order they come. Cultures and

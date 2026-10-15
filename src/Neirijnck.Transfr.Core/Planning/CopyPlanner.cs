@@ -1,5 +1,4 @@
-﻿using System.Globalization;
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 using Neirijnck.Transfr.Core.Content;
 using Neirijnck.Transfr.Core.References;
 using Neirijnck.Transfr.Core.Schema;
@@ -199,7 +198,7 @@ public static class CopyPlanner
         if (blocked.Contains(document.Key))
         {
             return new PlanRow(PlanItemKind.Document, document.Key, document.ParentKey, document.Name, source.DocumentTypeKey, PlanOutcome.Blocked,
-                BlockingNotes(source, sources, blocked, facts), [], differences, schemaProblems);
+                BlockingNotes(source, sources, blocked, facts), [], differences, schemaProblems, Fingerprint(source));
         }
 
         var notes = new List<PlanNote>();
@@ -215,14 +214,14 @@ public static class CopyPlanner
         }
         else if (source.Comparison!.IsIdentical)
         {
-            return new PlanRow(PlanItemKind.Document, document.Key, document.ParentKey, document.Name, source.DocumentTypeKey, PlanOutcome.Unchanged, notes, [], differences, schemaProblems);
+            return new PlanRow(PlanItemKind.Document, document.Key, document.ParentKey, document.Name, source.DocumentTypeKey, PlanOutcome.Unchanged, notes, [], differences, schemaProblems, Fingerprint(source));
         }
         else if (!facts.Baseline.TryGetValue(document.Key, out var copiedAt))
         {
             outcome = PlanOutcome.Conflict;
             notes.Add(new PlanNote(PlanNoteKind.NoBaseline));
         }
-        else if (LastUpdate(source.TargetJson) == copiedAt)
+        else if (DocumentJson.LastUpdate(source.TargetJson) == copiedAt)
         {
             outcome = PlanOutcome.Update;
         }
@@ -276,7 +275,7 @@ public static class CopyPlanner
             notes.Add(new PlanNote(PlanNoteKind.MediaMissingHere, reference.Key, reference.PropertyAlias, reference.Culture));
         }
 
-        return new PlanRow(PlanItemKind.Document, document.Key, document.ParentKey, document.Name, source.DocumentTypeKey, outcome, notes, publish, differences, schemaProblems);
+        return new PlanRow(PlanItemKind.Document, document.Key, document.ParentKey, document.Name, source.DocumentTypeKey, outcome, notes, publish, differences, schemaProblems, Fingerprint(source));
     }
 
     // The media the written documents reference that the target lacks, each after the folders it needs.
@@ -317,11 +316,7 @@ public static class CopyPlanner
         return rows;
     }
 
-    // The target's last save of any variant: what a recorded copy is checked against.
-    private static DateTimeOffset? LastUpdate(JsonObject document)
-        => DocumentJson.Entries(document["variants"], withAlias: false)
-            .Select(variant => DateTimeOffset.TryParse(DocumentJson.StringOf(variant.Entry["updateDate"]), CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : (DateTimeOffset?)null)
-            .Max();
+    private static string Fingerprint(Source source) => PlanFingerprint.Of(source.Json, source.TargetJson);
 
     private static bool SameName(string left, string right)
         => string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);

@@ -18,6 +18,9 @@ namespace Neirijnck.Transfr.Core.Planning;
 /// </param>
 /// <param name="Differences">For a document on both sides: what differs.</param>
 /// <param name="SchemaProblems">For a schema mismatch: the problems.</param>
+/// <param name="Fingerprint">
+/// For a document: what the dry run saw of it on both sides; a transfer refuses when it changed since.
+/// </param>
 public sealed record PlanRow(
     PlanItemKind Kind,
     Guid Key,
@@ -28,4 +31,5 @@ public sealed record PlanRow(
     IReadOnlyList<PlanNote> Notes,
     IReadOnlyList<string?> PublishCultures,
     IReadOnlyList<ContentDifference> Differences,
-    IReadOnlyList<SchemaProblem> SchemaProblems);
+    IReadOnlyList<SchemaProblem> SchemaProblems,
+    string? Fingerprint = null);
