@@ -167,6 +167,8 @@ The version is `VersionPrefix` in the project file; `src/Neirijnck.Transfr/Clien
 
 CI (`.github/workflows/ci.yml`) runs the client checks, the build and the tests on every push to `master` and every pull request. A tag `vX.Y.Z` (pushed, or created with a GitHub release) also publishes that version to nuget.org through Trusted Publishing, once the checks pass and only when the tag matches `VersionPrefix`. That needs a Trusted Publishing policy on nuget.org for this repository and `ci.yml`, and a repository secret `NUGET_USER` holding the nuget.org user name.
 
+The Umbraco Marketplace shows `umbraco-marketplace-readme.md` instead of this README: a copy of the part above **Repository layout** (without the logo), followed by links. Change both together; a unit test checks that the copy matches.
+
 To regenerate the TypeScript API client, keep test site A running (see below) and run:
 
 ```bash
