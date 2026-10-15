@@ -14,5 +14,6 @@ public sealed class TransfrMigrationPlan : PackageMigrationPlan
     }
 
     protected override void DefinePlan()
-        => this.To<GrantSectionToAdministrators>(new Guid("8c1f3c2e-5a7d-4f2b-9e61-3d0b7a4c2f18"));
+        => this.To<GrantSectionToAdministrators>(new Guid("8c1f3c2e-5a7d-4f2b-9e61-3d0b7a4c2f18"))
+            .To<CreateCopyHistory>(new Guid("efe6f7b8-0399-448e-8e64-7e44c133526a"));
 }

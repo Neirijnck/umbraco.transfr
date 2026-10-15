@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Neirijnck.Transfr.Compare;
 using Neirijnck.Transfr.Configuration;
 using Neirijnck.Transfr.Local;
+using Neirijnck.Transfr.Persistence;
 using Neirijnck.Transfr.Planning;
 using Neirijnck.Transfr.Remote;
 using Umbraco.Cms.Core.Composing;
@@ -33,6 +34,7 @@ public class TransfrRemoteComposer : IComposer
         builder.Services.AddSingleton<SchemaCheckService>();
         builder.Services.AddSingleton<TreeCompareService>();
         builder.Services.AddSingleton<DocumentDiffService>();
+        builder.Services.AddSingleton<CopyHistoryStore>();
         builder.Services.AddSingleton<CopyPlanService>();
     }
 }

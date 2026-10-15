@@ -8,6 +8,7 @@ using Neirijnck.Transfr.Core.Planning;
 using Neirijnck.Transfr.Core.References;
 using Neirijnck.Transfr.Core.Remote;
 using Neirijnck.Transfr.Local;
+using Neirijnck.Transfr.Persistence;
 using Neirijnck.Transfr.Remote;
 using Umbraco.Cms.Core.Services;
 
@@ -31,6 +32,7 @@ public sealed partial class CopyPlanService
     private readonly RemoteDocumentReader remoteDocuments;
     private readonly SchemaCheckService schemaChecks;
     private readonly LocalSchemaNames schemaNames;
+    private readonly CopyHistoryStore history;
     private readonly ILanguageService languageService;
     private readonly ILogger<CopyPlanService> logger;
 
@@ -41,6 +43,7 @@ public sealed partial class CopyPlanService
         RemoteDocumentReader remoteDocuments,
         SchemaCheckService schemaChecks,
         LocalSchemaNames schemaNames,
+        CopyHistoryStore history,
         ILanguageService languageService,
         ILogger<CopyPlanService> logger)
     {
@@ -50,6 +53,7 @@ public sealed partial class CopyPlanService
         this.remoteDocuments = remoteDocuments;
         this.schemaChecks = schemaChecks;
         this.schemaNames = schemaNames;
+        this.history = history;
         this.languageService = languageService;
         this.logger = logger;
     }
@@ -120,8 +124,8 @@ public sealed partial class CopyPlanService
             LocalMedia = localMedia,
             MediaOnTarget = mediaOnTarget.Keys.ToHashSet(),
 
-            // No history yet (step 9 records copies), so every different node is a conflict.
-            Baseline = new Dictionary<Guid, DateTimeOffset>(),
+            // A node different on the target is an update only when the target is as our last copy left it.
+            Baseline = this.history.LatestTargetUpdates(remote, sources.Select(source => source.Key).ToList()),
         });
 
         var result = this.Describe(rows, siblings, localMedia, schema, culture, requests);
