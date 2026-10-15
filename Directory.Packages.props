@@ -59,7 +59,8 @@
     -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <!--
-      GHSA-r955-8q5j-3h83 (CVE-2026-96958, high): denial of service in 10.0.0 up to 10.0.12. Dragged in by
+      GHSA-r955-8q5j-3h83 (CVE-2026-96958, high) and GHSA-c399-9853-6jmj (CVE-2026-96959, high): denial of service
+      in 10.0.0 up to 10.0.12. Dragged in by
       Umbraco.Cms.Api.Management, Umbraco.Cms.Web.Website and Microsoft.AspNetCore.DataProtection.
     -->
     <PackageVersion Include="System.Security.Cryptography.Xml" Version="10.0.13" />
