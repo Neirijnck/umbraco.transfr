@@ -69,6 +69,27 @@ public sealed class SchemaCheckerTests
         Assert.Empty(check.Problems);
     }
 
+    // Umbraco ignores a pattern that is null, empty or white space; one environment served "" where its copy served null.
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task CheckAsync_AnEmptyPatternOnOneSide_IsNoPattern(string pattern)
+    {
+        var (check, _, _) = await Check(TestPage, side => Property(side, TestPage, "title")["validation"]!["regEx"] = pattern);
+
+        Assert.True(check.IsOk);
+    }
+
+    [Fact]
+    public async Task CheckAsync_APatternOnOneSideOnly_Differs()
+    {
+        var (check, _, _) = await Check(TestPage, side => Property(side, TestPage, "title")["validation"]!["regEx"] = "^[a-z]+$");
+
+        var problem = Assert.Single(check.Problems);
+        Assert.Equal(SchemaProblemReason.Differs, problem.Reason);
+        Assert.Equal(["property 'title' pattern: none here, ^[a-z]+$ on the remote"], problem.Details);
+    }
+
     [Fact]
     public async Task CheckAsync_FollowsDataTypesAndTheElementTypesInBlocks_EachOnce()
     {

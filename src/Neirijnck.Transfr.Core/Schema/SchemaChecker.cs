@@ -178,7 +178,7 @@ public static class SchemaChecker
             CompareFlag(details, $"property '{alias}' varies by culture", localProperty["variesByCulture"], remoteProperty["variesByCulture"]);
             CompareFlag(details, $"property '{alias}' varies by segment", localProperty["variesBySegment"], remoteProperty["variesBySegment"]);
             CompareFlag(details, $"property '{alias}' is mandatory", localProperty["validation"]?["mandatory"], remoteProperty["validation"]?["mandatory"]);
-            CompareText(details, $"property '{alias}' pattern", localProperty["validation"]?["regEx"], remoteProperty["validation"]?["regEx"]);
+            ComparePattern(details, $"property '{alias}' pattern", localProperty["validation"]?["regEx"], remoteProperty["validation"]?["regEx"]);
         }
 
         return details;
@@ -230,6 +230,18 @@ public static class SchemaChecker
         if (!string.Equals(localText, remoteText, StringComparison.Ordinal))
         {
             details.Add($"{what}: {localText ?? "none"} here, {remoteText ?? "none"} on the remote");
+        }
+    }
+
+    // Umbraco validates a pattern only when it isn't null, empty or white space (DataValueEditor.Validate, 17.7.0), so all
+    // three mean "no pattern". Seen in practice: one environment served null and its copy "" for the same properties.
+    private static void ComparePattern(List<string> details, string what, JsonNode? local, JsonNode? remote)
+    {
+        var localPattern = DocumentJson.StringOf(local) is { } l && !string.IsNullOrWhiteSpace(l) ? l : null;
+        var remotePattern = DocumentJson.StringOf(remote) is { } r && !string.IsNullOrWhiteSpace(r) ? r : null;
+        if (!string.Equals(localPattern, remotePattern, StringComparison.Ordinal))
+        {
+            details.Add($"{what}: {localPattern ?? "none"} here, {remotePattern ?? "none"} on the remote");
         }
     }
 
