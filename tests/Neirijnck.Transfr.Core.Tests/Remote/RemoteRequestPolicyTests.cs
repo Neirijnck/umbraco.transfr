@@ -19,6 +19,11 @@ public sealed class RemoteRequestPolicyTests
         "GET " + Api + "/document-type/{id}",
         "GET " + Api + "/data-type/{id}",
         "GET " + Api + "/item/document-type/search",
+        "POST " + Api + "/document",
+        "POST " + Api + "/document/create-and-publish",
+        "PUT " + Api + "/document/{id}",
+        "PUT " + Api + "/document/{id}/update-and-publish",
+        "PUT " + Api + "/document/sort",
     ];
 
     private static readonly string[] AllowedMethods = ["GET", "POST", "PUT"];
@@ -65,6 +70,11 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("GET", Api + "/document-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/data-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/item/document-type/search?query=Home")]
+    [InlineData("POST", Api + "/document")]
+    [InlineData("POST", Api + "/document/create-and-publish")]
+    [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/update-and-publish")]
+    [InlineData("PUT", Api + "/document/sort")]
     public void IsAllowed_AcceptsListedRequests(string method, string path)
     {
         Assert.True(RemoteRequestPolicy.IsAllowed(method, path));
@@ -84,7 +94,18 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("GET", "/tree/document/root")]
     [InlineData("GET", "")]
     [InlineData("DELETE", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
-    [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("POST", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("PUT", Api + "/document")]
+    [InlineData("PUT", Api + "/document/sort/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/publish")]
+    [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/publish-with-descendants")]
+    [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/sort-children")]
+    [InlineData("PUT", Api + "/document/root/sort-children")]
+    [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/move")]
+    [InlineData("POST", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/copy")]
+    [InlineData("PATCH", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/patch")]
+    [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/domains")]
+    [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/public-access")]
     [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/unpublish")]
     [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/move-to-recycle-bin")]
     [InlineData("GET", Api + "/document/root")]

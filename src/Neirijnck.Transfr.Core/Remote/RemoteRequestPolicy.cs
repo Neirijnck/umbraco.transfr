@@ -21,6 +21,14 @@ public static class RemoteRequestPolicy
         new("GET", ApiBase + "/document-type/{id}"),
         new("GET", ApiBase + "/data-type/{id}"),
         new("GET", ApiBase + "/item/document-type/search"),
+
+        // Writes, for a transfer: create or update a document (publishing its cultures in the same request), and sort
+        // a parent's children. Nothing that deletes, unpublishes, moves or copies.
+        new("POST", ApiBase + "/document"),
+        new("POST", ApiBase + "/document/create-and-publish"),
+        new("PUT", ApiBase + "/document/{id}"),
+        new("PUT", ApiBase + "/document/{id}/update-and-publish"),
+        new("PUT", ApiBase + "/document/sort"),
     ];
 
     /// <summary>
