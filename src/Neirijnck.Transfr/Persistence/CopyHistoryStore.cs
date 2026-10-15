@@ -24,10 +24,10 @@ public sealed class CopyHistoryStore
     }
 
     /// <summary>
-    /// For each of these documents copied from here to the remote before: the target's last save right after the latest
-    /// copy. Documents never copied there are left out.
+    /// For each of these documents copied from here to the remote before: the latest copy. Documents never copied there
+    /// are left out.
     /// </summary>
-    public IReadOnlyDictionary<Guid, DateTimeOffset> LatestTargetUpdates(RemoteDefinition remote, IReadOnlyCollection<Guid> keys)
+    public IReadOnlyDictionary<Guid, LastCopy> LatestCopies(RemoteDefinition remote, IReadOnlyCollection<Guid> keys)
     {
         ArgumentNullException.ThrowIfNull(remote);
         ArgumentNullException.ThrowIfNull(keys);
@@ -48,10 +48,15 @@ public sealed class CopyHistoryStore
 
         return rows
             .GroupBy(row => row.DocumentKey)
-            .ToDictionary(
-                group => group.Key,
-                group => DateTimeOffset.Parse(group.MaxBy(row => row.Id)!.TargetUpdateDate, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
+            .ToDictionary(group => group.Key, group => ToLastCopy(group.MaxBy(row => row.Id)!));
     }
+
+    // copiedAt is written as UTC; the database hands it back without a kind.
+    private static LastCopy ToLastCopy(CopyHistoryDto row)
+        => new(
+            DateTimeOffset.Parse(row.TargetUpdateDate, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+            new DateTimeOffset(DateTime.SpecifyKind(row.CopiedAt, DateTimeKind.Utc)),
+            row.UserKey);
 
     /// <summary>Records documents just copied from here to the remote, all in one transaction.</summary>
     public void RecordToRemote(RemoteDefinition remote, Guid userKey, IReadOnlyCollection<CopyRecord> records)

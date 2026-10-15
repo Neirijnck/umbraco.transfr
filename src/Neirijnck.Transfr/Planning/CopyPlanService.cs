@@ -36,6 +36,7 @@ public sealed partial class CopyPlanService
     private readonly CopyHistoryStore history;
     private readonly RemoteAuditReader audit;
     private readonly ILanguageService languageService;
+    private readonly IUserService userService;
     private readonly ILogger<CopyPlanService> logger;
 
     public CopyPlanService(
@@ -48,6 +49,7 @@ public sealed partial class CopyPlanService
         CopyHistoryStore history,
         RemoteAuditReader audit,
         ILanguageService languageService,
+        IUserService userService,
         ILogger<CopyPlanService> logger)
     {
         this.localTree = localTree;
@@ -59,6 +61,7 @@ public sealed partial class CopyPlanService
         this.history = history;
         this.audit = audit;
         this.languageService = languageService;
+        this.userService = userService;
         this.logger = logger;
     }
 
@@ -116,6 +119,7 @@ public sealed partial class CopyPlanService
             : await this.remoteTree.LocateMediaAsync(remote, mediaKeys.Union(localMedia.Keys).ToList(), cancellationToken);
         requests += mediaRequests;
 
+        var lastCopies = this.history.LatestCopies(remote, sources.Select(source => source.Key).ToList());
         var rows = CopyPlanner.Plan(new CopyPlanFacts
         {
             Sources = sources,
@@ -129,7 +133,7 @@ public sealed partial class CopyPlanService
             MediaOnTarget = mediaOnTarget.Keys.ToHashSet(),
 
             // A node different on the target is an update only when the target is as our last copy left it.
-            Baseline = this.history.LatestTargetUpdates(remote, sources.Select(source => source.Key).ToList()),
+            Baseline = lastCopies.ToDictionary(pair => pair.Key, pair => pair.Value.TargetUpdate),
         });
 
         var conflicts = rows.Where(row => row.Kind == PlanItemKind.Document && row.Outcome == PlanOutcome.Conflict).Select(row => row.Key).ToList();
@@ -140,6 +144,7 @@ public sealed partial class CopyPlanService
         {
             SourceJson = sources.ToDictionary(source => source.Key, source => source.Json),
             RemoteChanges = changes,
+            LastCopies = await this.DescribeLastCopiesAsync(lastCopies),
         };
         var create = rows.Count(row => row.Outcome == PlanOutcome.Create);
         var conflict = rows.Count(row => row.Outcome == PlanOutcome.Conflict);
@@ -279,6 +284,18 @@ public sealed partial class CopyPlanService
         return (changes, requests);
     }
 
+    // The latest copies with the names of the users here who ran them.
+    private async Task<IReadOnlyDictionary<Guid, LastCopyInfo>> DescribeLastCopiesAsync(IReadOnlyDictionary<Guid, LastCopy> lastCopies)
+    {
+        if (lastCopies.Count == 0)
+        {
+            return new Dictionary<Guid, LastCopyInfo>();
+        }
+
+        var users = await this.userService.GetAsync(lastCopies.Values.Select(copy => copy.UserKey).Distinct());
+        var names = users.ToDictionary(user => user.Key, user => user.Name);
+        return lastCopies.ToDictionary(pair => pair.Key, pair => new LastCopyInfo(names.GetValueOrDefault(pair.Value.UserKey), pair.Value.CopiedAt));
+    }
 
     // A refused or failed remote read, an unexpected answer, or a timeout; not the caller cancelling.
     private static bool IsUnreadable(Exception exception, CancellationToken cancellationToken)
@@ -351,7 +368,8 @@ public sealed partial class CopyPlanService
             schema.SeparateInstall,
             requests,
             new Dictionary<Guid, string>(),
-            new Dictionary<Guid, RemoteChangeInfo>());
+            new Dictionary<Guid, RemoteChangeInfo>(),
+            new Dictionary<Guid, LastCopyInfo>());
     }
 
     private static Guid? DocumentTypeOf(string documentJson)

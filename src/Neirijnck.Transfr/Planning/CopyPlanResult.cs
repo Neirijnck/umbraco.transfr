@@ -15,6 +15,7 @@ namespace Neirijnck.Transfr.Planning;
 /// <param name="RemoteRequests">Requests it cost on the remote.</param>
 /// <param name="SourceJson">The JSON here of every planned document, by key: what a transfer writes.</param>
 /// <param name="RemoteChanges">Who last changed each conflicting document on the remote, where that could be read.</param>
+/// <param name="LastCopies">The latest copy of each planned document to this remote, for those copied before.</param>
 public sealed record CopyPlanResult(
     IReadOnlyList<PlanRow> Rows,
     IReadOnlyDictionary<Guid, string> Names,
@@ -23,4 +24,5 @@ public sealed record CopyPlanResult(
     IReadOnlyList<SeparateInstallEvidence> SeparateInstall,
     int RemoteRequests,
     IReadOnlyDictionary<Guid, string> SourceJson,
-    IReadOnlyDictionary<Guid, RemoteChangeInfo> RemoteChanges);
+    IReadOnlyDictionary<Guid, RemoteChangeInfo> RemoteChanges,
+    IReadOnlyDictionary<Guid, LastCopyInfo> LastCopies);

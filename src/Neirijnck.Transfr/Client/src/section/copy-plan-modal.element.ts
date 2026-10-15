@@ -14,6 +14,7 @@ import type { TransfrCopyPlanModalData, TransfrCopyPlanModalValue } from './copy
 import {
   OUTCOMES,
   countOutcomes,
+  describeLastCopy,
   describeNote,
   describePublish,
   describeRemoteChange,
@@ -330,6 +331,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
         </div>
         ${differs ? html`<div class="line">Differs on ${remote}: ${differs}</div>` : nothing}
         ${row.changedOnRemote ? html`<div class="line">${describeRemoteChange(row.changedOnRemote, remote)}</div>` : nothing}
+        ${row.lastCopied ? html`<div class="line">${describeLastCopy(row.lastCopied, remote)}</div>` : nothing}
         ${publish ? html`<div class="line">${publish}</div>` : nothing}
         ${
           row.kind === 'Document' && row.outcome === 'Conflict'

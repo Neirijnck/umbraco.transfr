@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanNoteResponseModel, PlanRowResponseModel } from '../api/index.js';
-import { countOutcomes, describeNote, describePublish, describeRemoteChange, outcomeLook } from './plan-view.js';
+import {
+  countOutcomes,
+  describeLastCopy,
+  describeNote,
+  describePublish,
+  describeRemoteChange,
+  outcomeLook,
+} from './plan-view.js';
 
 const row = (outcome: string, publishCultures: Array<string | null> = [], kind = 'Document'): PlanRowResponseModel => ({
   kind,
@@ -49,6 +56,22 @@ describe('describeRemoteChange', () => {
   it('leaves out a user it has no name for, and shows an unknown change as named', () => {
     expect(describeRemoteChange({ at, what: 'Copy' }, 'Test site B', 'UTC')).toBe(
       'Last Copy on Test site B, 15 Oct 2026, 10:25',
+    );
+  });
+});
+
+describe('describeLastCopy', () => {
+  const at = '2026-10-15T10:52:47.6602278+00:00';
+
+  it('names the remote, the user here and the time in the given zone', () => {
+    expect(describeLastCopy({ by: 'Transfr Admin', at }, 'Test site B', 'Europe/Brussels')).toBe(
+      'Last copied to Test site B by Transfr Admin, 15 Oct 2026, 12:52',
+    );
+  });
+
+  it('leaves out a user that no longer exists', () => {
+    expect(describeLastCopy({ by: null, at }, 'Test site B', 'UTC')).toBe(
+      'Last copied to Test site B, 15 Oct 2026, 10:52',
     );
   });
 });

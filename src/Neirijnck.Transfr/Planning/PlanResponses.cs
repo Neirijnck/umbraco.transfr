@@ -30,7 +30,8 @@ internal static class PlanResponses
             row.Differences.Select(ResponseMapping.From).ToList(),
             row.SchemaProblems.Select(ResponseMapping.From).ToList(),
             row.Fingerprint,
-            result.RemoteChanges.GetValueOrDefault(row.Key) is { } change ? new RemoteChangeResponseModel(change.By, change.At, change.What) : null);
+            result.RemoteChanges.GetValueOrDefault(row.Key) is { } change ? new RemoteChangeResponseModel(change.By, change.At, change.What) : null,
+            result.LastCopies.GetValueOrDefault(row.Key) is { } copy ? new LastCopyResponseModel(copy.By, copy.At) : null);
     }
 
     private static PlanNoteResponseModel Note(PlanNote note, ContentTypeNames? type, CopyPlanResult result)

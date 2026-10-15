@@ -1,4 +1,9 @@
-import type { PlanNoteResponseModel, PlanRowResponseModel, RemoteChangeResponseModel } from '../api/index.js';
+import type {
+  LastCopyResponseModel,
+  PlanNoteResponseModel,
+  PlanRowResponseModel,
+  RemoteChangeResponseModel,
+} from '../api/index.js';
 
 export type OutcomeLook = {
   label: string;
@@ -74,10 +79,19 @@ const CHANGE_VERBS: Readonly<Record<string, string>> = {
  */
 export function describeRemoteChange(change: RemoteChangeResponseModel, remoteName: string, timeZone?: string): string {
   const verb = CHANGE_VERBS[change.what] ?? change.what;
-  const at = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(
-    new Date(change.at),
-  );
-  return `Last ${verb} on ${remoteName}${change.by ? ` by ${change.by}` : ''}, ${at}`;
+  return `Last ${verb} on ${remoteName}${change.by ? ` by ${change.by}` : ''}, ${formatWhen(change.at, timeZone)}`;
+}
+
+/**
+ * The latest copy of a document from here to the remote, e.g. "Last copied to Test site B by Transfr Admin, 15 Oct
+ * 2026, 12:52".
+ */
+export function describeLastCopy(copy: LastCopyResponseModel, remoteName: string, timeZone?: string): string {
+  return `Last copied to ${remoteName}${copy.by ? ` by ${copy.by}` : ''}, ${formatWhen(copy.at, timeZone)}`;
+}
+
+function formatWhen(at: string, timeZone: string | undefined): string {
+  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone }).format(new Date(at));
 }
 
 /** One note in words, naming the remote, the item and the property it is about. */

@@ -61,6 +61,11 @@ export type FieldDiffResponseModel = {
     differs: boolean;
 };
 
+export type LastCopyResponseModel = {
+    by?: string | null;
+    at: string;
+};
+
 export type PlanDriftResponseModel = {
     key: string;
     name?: string | null;
@@ -93,6 +98,7 @@ export type PlanRowResponseModel = {
     schemaProblems: Array<SchemaProblemResponseModel>;
     fingerprint?: string | null;
     changedOnRemote?: RemoteChangeResponseModel | null;
+    lastCopied?: LastCopyResponseModel | null;
 };
 
 export type PlanSelectionRequestModel = {
