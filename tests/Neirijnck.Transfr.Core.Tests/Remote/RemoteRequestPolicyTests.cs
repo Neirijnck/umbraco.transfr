@@ -19,6 +19,8 @@ public sealed class RemoteRequestPolicyTests
         "GET " + Api + "/document-type/{id}",
         "GET " + Api + "/data-type/{id}",
         "GET " + Api + "/item/document-type/search",
+        "GET " + Api + "/document/{id}/audit-log",
+        "GET " + Api + "/item/user",
         "POST " + Api + "/document",
         "POST " + Api + "/document/create-and-publish",
         "PUT " + Api + "/document/{id}",
@@ -50,10 +52,14 @@ public sealed class RemoteRequestPolicyTests
         Assert.All(methods, method => Assert.Contains(method, AllowedMethods));
     }
 
+    // The one reviewed exception to the fragment rule: reading user names (Preben's call, 2026-10-15), so a conflict can
+    // say who last changed a document on the remote. Every other user endpoint stays forbidden.
+    private static readonly string[] AllowedDespiteFragment = ["GET " + Api + "/item/user"];
+
     [Fact]
     public void Endpoints_ContainNoForbiddenOperation()
     {
-        foreach (var endpoint in RemoteRequestPolicy.Endpoints)
+        foreach (var endpoint in RemoteRequestPolicy.Endpoints.Where(e => !AllowedDespiteFragment.Contains($"{e.Method} {e.PathTemplate}")))
         {
             var segments = endpoint.PathTemplate.Split('/', StringSplitOptions.RemoveEmptyEntries);
             Assert.DoesNotContain(segments, segment => ForbiddenFragments.Contains(segment, StringComparer.OrdinalIgnoreCase));
@@ -75,6 +81,8 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/update-and-publish")]
     [InlineData("PUT", Api + "/document/sort")]
+    [InlineData("GET", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/audit-log?orderDirection=Descending&skip=0&take=20")]
+    [InlineData("GET", Api + "/item/user?id=3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     public void IsAllowed_AcceptsListedRequests(string method, string path)
     {
         Assert.True(RemoteRequestPolicy.IsAllowed(method, path));
@@ -109,7 +117,10 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/unpublish")]
     [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/move-to-recycle-bin")]
     [InlineData("GET", Api + "/document/root")]
-    [InlineData("GET", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/audit-log")]
+    [InlineData("GET", Api + "/user")]
+    [InlineData("GET", Api + "/user/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("POST", Api + "/item/user")]
+    [InlineData("GET", Api + "/item/user-group")]
     [InlineData("DELETE", Api + "/document-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("PUT", Api + "/document-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("POST", Api + "/document-type")]

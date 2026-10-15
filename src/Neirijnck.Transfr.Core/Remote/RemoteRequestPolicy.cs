@@ -22,6 +22,11 @@ public static class RemoteRequestPolicy
         new("GET", ApiBase + "/data-type/{id}"),
         new("GET", ApiBase + "/item/document-type/search"),
 
+        // Who last changed a document there, for a conflict: its audit log and the users' names. item/user reads names
+        // only; every other user endpoint stays out.
+        new("GET", ApiBase + "/document/{id}/audit-log"),
+        new("GET", ApiBase + "/item/user"),
+
         // Writes, for a transfer: create or update a document (publishing its cultures in the same request), and sort
         // a parent's children. Nothing that deletes, unpublishes, moves or copies.
         new("POST", ApiBase + "/document"),
