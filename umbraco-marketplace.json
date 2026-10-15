@@ -5,7 +5,8 @@
   "Category": "Developer Tools",
   "AuthorDetails": {
     "Name": "Preben Neirijnck",
-    "Url": "https://github.com/Neirijnck"
+    "Url": "https://github.com/Neirijnck",
+    "ImageUrl": "https://github.com/Neirijnck.png"
   },
   "LicenseTypes": [ "Free" ],
   "PackageType": "Package",
