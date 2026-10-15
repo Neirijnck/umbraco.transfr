@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Neirijnck.Transfr.Compare;
 using Neirijnck.Transfr.Configuration;
+using Neirijnck.Transfr.History;
 using Neirijnck.Transfr.Local;
 using Neirijnck.Transfr.Persistence;
 using Neirijnck.Transfr.Planning;
@@ -39,5 +40,6 @@ public class TransfrRemoteComposer : IComposer
         builder.Services.AddSingleton<CopyHistoryStore>();
         builder.Services.AddSingleton<CopyPlanService>();
         builder.Services.AddSingleton<TransferService>();
+        builder.Services.AddSingleton<TransferHistoryService>();
     }
 }
