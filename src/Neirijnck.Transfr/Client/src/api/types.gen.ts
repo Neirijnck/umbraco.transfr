@@ -46,6 +46,12 @@ export type DocumentDiffResponseModel = {
     properties: Array<PropertyDiffResponseModel>;
 };
 
+export type DryRunRowRequestModel = {
+    key: string;
+    outcome: string;
+    fingerprint?: string | null;
+};
+
 export type FieldDiffResponseModel = {
     kind: string;
     culture?: string | null;
@@ -53,6 +59,14 @@ export type FieldDiffResponseModel = {
     local?: string | null;
     remote?: string | null;
     differs: boolean;
+};
+
+export type PlanDriftResponseModel = {
+    key: string;
+    name?: string | null;
+    reason: string;
+    was?: string | null;
+    now?: string | null;
 };
 
 export type PlanNoteResponseModel = {
@@ -77,6 +91,7 @@ export type PlanRowResponseModel = {
     publishCultures: Array<string>;
     differences: Array<ContentDifferenceResponseModel>;
     schemaProblems: Array<SchemaProblemResponseModel>;
+    fingerprint?: string | null;
 };
 
 export type PlanSelectionRequestModel = {
@@ -151,6 +166,32 @@ export type SubtreeResponseModel = {
     separateInstall: Array<SeparateInstallResponseModel>;
     remoteRequests: number;
     truncated: boolean;
+};
+
+export type TransferRequestModel = {
+    selection: Array<PlanSelectionRequestModel>;
+    dryRun: Array<DryRunRowRequestModel>;
+    overwrite: Array<string>;
+};
+
+export type TransferResponseModel = {
+    status: string;
+    rows: Array<TransferRowResponseModel>;
+    drift: Array<PlanDriftResponseModel>;
+    sortedParents: number;
+    error?: string | null;
+    remoteRequests: number;
+};
+
+export type TransferRowResponseModel = {
+    kind: string;
+    key: string;
+    name: string;
+    outcome: string;
+    result: string;
+    publishCultures: Array<string>;
+    error?: string | null;
+    targetState?: string | null;
 };
 
 export type TreeLevelResponseModel = {
@@ -442,6 +483,49 @@ export type CompareSubtreeResponses = {
 };
 
 export type CompareSubtreeResponse = CompareSubtreeResponses[keyof CompareSubtreeResponses];
+
+export type TransferData = {
+    body?: TransferRequestModel;
+    path: {
+        alias: string;
+    };
+    query?: never;
+    url: '/umbraco/management/api/v1/transfr/remotes/{alias}/transfer';
+};
+
+export type TransferErrors = {
+    /**
+     * Bad Request
+     */
+    400: ProblemDetails;
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+    /**
+     * The authenticated user does not have access to this resource
+     */
+    403: unknown;
+    /**
+     * Not Found
+     */
+    404: unknown;
+    /**
+     * Bad Gateway
+     */
+    502: ProblemDetails;
+};
+
+export type TransferError = TransferErrors[keyof TransferErrors];
+
+export type TransferResponses = {
+    /**
+     * OK
+     */
+    200: TransferResponseModel;
+};
+
+export type TransferResponse = TransferResponses[keyof TransferResponses];
 
 export type CompareTreeLevelData = {
     body?: never;

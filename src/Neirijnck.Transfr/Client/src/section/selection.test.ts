@@ -5,6 +5,8 @@ import {
   coverForChildren,
   describeSelection,
   fromRequest,
+  loadBatch,
+  saveBatch,
   setIncludeDescendants,
   toRequest,
   toggleSelected,
@@ -70,6 +72,66 @@ describe('selection', () => {
     ],
   ])('describes %o', (selection, expected) => {
     expect(describeSelection(selection)).toBe(expected);
+  });
+});
+
+describe('batch storage', () => {
+  const memory = () => {
+    const items = new Map<string, string>();
+    return {
+      items,
+      getItem: (key: string) => items.get(key) ?? null,
+      setItem: (key: string, value: string) => void items.set(key, value),
+      removeItem: (key: string) => void items.delete(key),
+    };
+  };
+
+  it('keeps the batch per remote and gives it back in the order picked', () => {
+    const storage = memory();
+    saveBatch(
+      storage,
+      'b',
+      new Map([
+        ['x', true],
+        ['y', false],
+      ]),
+    );
+    saveBatch(storage, 'c', new Map([['z', false]]));
+
+    expect([...loadBatch(storage, 'b')]).toEqual([
+      ['x', true],
+      ['y', false],
+    ]);
+    expect([...loadBatch(storage, 'c')]).toEqual([['z', false]]);
+  });
+
+  it('removes an empty batch', () => {
+    const storage = memory();
+    saveBatch(storage, 'b', new Map([['x', true]]));
+    saveBatch(storage, 'b', new Map());
+
+    expect(storage.items.size).toBe(0);
+  });
+
+  it('gives an empty batch for nothing stored, something else stored, or storage that throws', () => {
+    const storage = memory();
+    storage.setItem('transfr.batch.b', '{"not":"a list"}');
+    storage.setItem('transfr.batch.c', '[{"key":"x"},{"key":"y","includeDescendants":true}]');
+    const broken = {
+      getItem: () => {
+        throw new Error('denied');
+      },
+      setItem: () => {
+        throw new Error('full');
+      },
+      removeItem: () => undefined,
+    };
+
+    expect(loadBatch(storage, 'b').size).toBe(0);
+    expect([...loadBatch(storage, 'c')]).toEqual([['y', true]]);
+    expect(loadBatch(undefined, 'b').size).toBe(0);
+    expect(loadBatch(broken, 'b').size).toBe(0);
+    expect(() => saveBatch(broken, 'b', new Map([['x', false]]))).not.toThrow();
   });
 });
 

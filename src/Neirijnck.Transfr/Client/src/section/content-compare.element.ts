@@ -1,9 +1,15 @@
 import { css, customElement, html, nothing, repeat, state } from '@umbraco-cms/backoffice/external/lit';
+import type { PropertyValues } from '@umbraco-cms/backoffice/external/lit';
 import type { UUISelectElement } from '@umbraco-cms/backoffice/external/uui';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { tryExecute } from '@umbraco-cms/backoffice/resources';
 import { TransfrService } from '../api/index.js';
-import type { RemoteResponseModel, SeparateInstallResponseModel, TreeRowResponseModel } from '../api/index.js';
+import type {
+  RemoteResponseModel,
+  SeparateInstallResponseModel,
+  TransferResponseModel,
+  TreeRowResponseModel,
+} from '../api/index.js';
 import { umbOpenModal } from '@umbraco-cms/backoffice/modal';
 import { describeDifference, summarizeDifferences } from './content-summary.js';
 import { TRANSFR_COPY_PLAN_MODAL } from './copy-plan-modal.token.js';
@@ -15,16 +21,29 @@ import {
   coverForChildren,
   describeSelection,
   fromRequest,
+  loadBatch,
+  saveBatch,
   setIncludeDescendants,
   toRequest,
   toggleSelected,
   whyNotSelectable,
 } from './selection.js';
-import type { Selection } from './selection.js';
+import type { BatchStorage, Selection } from './selection.js';
 import { countSubtree, describeCounts, formatDuration, positionsToReveal } from './subtree.js';
 import type { SubtreeCounts } from './subtree.js';
 import { rowView } from './tree-row-view.js';
 import type { SideKind } from './tree-row-view.js';
+import { wroteAnything } from './transfer-view.js';
+
+// Even reading sessionStorage can throw (blocked storage); then the batch just isn't kept.
+function batchStorage(): BatchStorage | undefined {
+  try {
+    return window.sessionStorage;
+  } catch (error) {
+    console.warn('[Transfr] Session storage is not available; the batch is not kept', error);
+    return undefined;
+  }
+}
 
 type Level =
   { state: 'loading' } | { state: 'failed'; message: string } | { state: 'loaded'; rows: Array<TreeRowResponseModel> };
@@ -98,9 +117,36 @@ export class TransfrContentCompareElement extends UmbLitElement {
     this._expanded = new Set();
     this._subtree = undefined;
     this._separateInstall = [];
-    this._selection = new Map();
+    this._selection = alias ? loadBatch(batchStorage(), alias) : new Map();
     if (alias) {
       void this.#loadLevel(ROOT);
+    }
+  }
+
+  // The batch outlives a refresh of the page (per tab, per remote): kept whenever it changes.
+  // Untyped PropertyValues: private state isn't part of keyof this.
+  override updated(changed: PropertyValues) {
+    super.updated(changed);
+    if (changed.has('_selection') && this._alias) {
+      saveBatch(batchStorage(), this._alias, this._selection);
+    }
+  }
+
+  // After a transfer: read every level shown so far again, keeping what is expanded; a completed batch is done.
+  #afterTransfer(alias: string, transfer: TransferResponseModel) {
+    if (alias !== this._alias) {
+      return;
+    }
+
+    if (transfer.status === 'Completed') {
+      this._selection = new Map();
+    }
+
+    if (wroteAnything(transfer)) {
+      this._subtree = undefined;
+      for (const parentKey of Object.keys(this._levels)) {
+        void this.#loadLevel(parentKey);
+      }
     }
   }
 
@@ -250,7 +296,12 @@ export class TransfrContentCompareElement extends UmbLitElement {
 
     const remote = this._remotes?.find((candidate) => candidate.alias === alias);
     umbOpenModal(this, TRANSFR_COPY_PLAN_MODAL, {
-      data: { alias, remoteName: remote?.name ?? alias, selection: toRequest(this._selection) },
+      data: {
+        alias,
+        remoteName: remote?.name ?? alias,
+        selection: toRequest(this._selection),
+        onTransferred: (transfer) => this.#afterTransfer(alias, transfer),
+      },
     })
       .then((value) => {
         if (alias === this._alias) {

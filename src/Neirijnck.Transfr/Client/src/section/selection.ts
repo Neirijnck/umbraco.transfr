@@ -40,6 +40,46 @@ export function fromRequest(selection: ReadonlyArray<PlanSelectionRequestModel>)
   return new Map(selection.map((choice) => [choice.key, choice.includeDescendants]));
 }
 
+/** The part of the Web Storage API the batch needs (sessionStorage in the browser, a fake in tests). */
+export type BatchStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+const batchKey = (alias: string) => `transfr.batch.${alias}`;
+
+/**
+ * The batch picked for a remote in this browser tab (Preben's call: per tab, per remote). Storage that is missing,
+ * full or blocked, or holds something else, gives an empty batch: a lost batch is picked again, never a crash.
+ */
+export function loadBatch(storage: BatchStorage | undefined, alias: string): Selection {
+  try {
+    const parsed: unknown = JSON.parse(storage?.getItem(batchKey(alias)) ?? '[]');
+    if (!Array.isArray(parsed)) {
+      return new Map();
+    }
+    return fromRequest(
+      parsed.filter(
+        (choice): choice is PlanSelectionRequestModel =>
+          typeof choice?.key === 'string' && typeof choice?.includeDescendants === 'boolean',
+      ),
+    );
+  } catch (error) {
+    console.warn('[Transfr] The batch in session storage could not be read', error);
+    return new Map();
+  }
+}
+
+/** Keeps the batch for a remote in this browser tab; an empty batch is removed. */
+export function saveBatch(storage: BatchStorage | undefined, alias: string, selection: Selection): void {
+  try {
+    if (selection.size === 0) {
+      storage?.removeItem(batchKey(alias));
+    } else {
+      storage?.setItem(batchKey(alias), JSON.stringify(toRequest(selection)));
+    }
+  } catch (error) {
+    console.warn('[Transfr] The batch could not be kept in session storage', error);
+  }
+}
+
 /**
  * The name of the picked ancestor that brings a node's children along (with everything below it), or undefined. `cover`
  * is the node's own: a covered node covers its children too.

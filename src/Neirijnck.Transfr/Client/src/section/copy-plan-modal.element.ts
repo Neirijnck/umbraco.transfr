@@ -2,7 +2,13 @@ import { css, customElement, html, nothing, repeat, state } from '@umbraco-cms/b
 import { UmbModalBaseElement } from '@umbraco-cms/backoffice/modal';
 import { tryExecute } from '@umbraco-cms/backoffice/resources';
 import { TransfrService } from '../api/index.js';
-import type { CopyPlanResponseModel, PlanNoteResponseModel, PlanRowResponseModel } from '../api/index.js';
+import type {
+  CopyPlanResponseModel,
+  PlanNoteResponseModel,
+  PlanRowResponseModel,
+  TransferResponseModel,
+  TransferRowResponseModel,
+} from '../api/index.js';
 import { summarizeDifferences } from './content-summary.js';
 import type { TransfrCopyPlanModalData, TransfrCopyPlanModalValue } from './copy-plan-modal.token.js';
 import { OUTCOMES, countOutcomes, describeNote, describePublish, outcomeLook } from './plan-view.js';
@@ -11,11 +17,14 @@ import { describeSchemaProblem, describeSeparateInstall } from './schema-view.js
 import { addToSelection, describeSelection, fromRequest, toRequest } from './selection.js';
 import type { Selection } from './selection.js';
 import { formatDuration } from './subtree.js';
+import { countWrites, describeDrift, describeTransfer, resultLook, toDryRun } from './transfer-view.js';
 
 /**
  * The dry run of copying the selected nodes to a remote: what would happen to each node, and why. It reads both sides
  * and changes nothing. A node a block asks for (a missing parent or linked page that exists here) can be added to the
- * selection from here, which runs the dry run again; closing hands the selection back to the tree.
+ * selection from here, which runs the dry run again. Conflicts can be chosen to overwrite; Transfer then carries out
+ * exactly this dry run (the server refuses when anything changed since) and shows what happened per node. Closing hands
+ * the selection back to the tree.
  */
 @customElement('transfr-copy-plan-modal')
 export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
@@ -40,6 +49,16 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
   @state()
   private _hideUnchanged = true;
 
+  // Conflicts chosen to overwrite, by key; cleared with every new dry run.
+  @state()
+  private _overwrite: ReadonlySet<string> = new Set();
+
+  @state()
+  private _transferring = false;
+
+  @state()
+  private _transfer?: TransferResponseModel;
+
   override connectedCallback() {
     super.connectedCallback();
     this._selection = fromRequest(this.data?.selection ?? []);
@@ -54,6 +73,8 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
 
     this._loading = true;
     this._error = undefined;
+    this._transfer = undefined;
+    this._overwrite = new Set();
     const started = performance.now();
     const { data, error } = await tryExecute(
       this,
@@ -76,24 +97,149 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
     void this.#load();
   }
 
+  #toggleOverwrite(key: string, overwrite: boolean) {
+    const next = new Set(this._overwrite);
+    if (overwrite) {
+      next.add(key);
+    } else {
+      next.delete(key);
+    }
+    this._overwrite = next;
+  }
+
+  // Carries out the dry run on screen; the server plans again and refuses when anything changed since.
+  async #transfer() {
+    const alias = this.data?.alias;
+    const plan = this._plan;
+    if (!alias || !plan) {
+      return;
+    }
+
+    this._transferring = true;
+    this._error = undefined;
+    const { data, error } = await tryExecute(
+      this,
+      TransfrService.transfer({
+        path: { alias },
+        body: { selection: toRequest(this._selection), dryRun: toDryRun(plan.rows), overwrite: [...this._overwrite] },
+      }),
+      { disableNotifications: true },
+    );
+    this._transferring = false;
+    if (data) {
+      this._transfer = data;
+      this.data?.onTransferred?.(data);
+      return;
+    }
+
+    this._error = problemMessage(error, 'The transfer failed.');
+  }
+
   #close() {
-    this.updateValue({ selection: toRequest(this._selection) });
+    this.updateValue({ selection: this._transfer?.status === 'Completed' ? [] : toRequest(this._selection) });
     this._submitModal();
   }
 
   override render() {
     const remote = this.data?.remoteName ?? 'the remote';
+    const plan = this._plan;
+    const writes = plan ? countWrites(plan.rows, this._overwrite) : 0;
+    const refused = (plan?.separateInstall.length ?? 0) > 0;
     return html`
-      <umb-body-layout headline=${`Dry run: copy to ${remote}`}>
-        <div class="intro">
-          <umb-icon name="icon-info"></umb-icon>
-          <span>A dry run reads both sides and changes nothing. ${describeSelection(this._selection)}.</span>
-        </div>
-        ${this.#renderBody(remote)}
+      <umb-body-layout headline=${this._transfer ? `Transfer to ${remote}` : `Dry run: copy to ${remote}`}>
+        ${
+          this._transfer
+            ? this.#renderReport(this._transfer, remote)
+            : html`<div class="intro">
+                  <umb-icon name="icon-info"></umb-icon>
+                  <span>A dry run reads both sides and changes nothing. ${describeSelection(this._selection)}.</span>
+                </div>
+                ${this.#renderBody(remote)}`
+        }
         <div slot="actions">
-          <uui-button look="primary" label="Close" @click=${() => this.#close()}></uui-button>
+          ${
+            this._transfer
+              ? this._transfer.status === 'Refused' || this._transfer.status === 'Busy'
+                ? html`<uui-button look="secondary" label="Dry run again" @click=${() => this.#load()}></uui-button>`
+                : nothing
+              : html`<uui-button
+                  look="primary"
+                  color="positive"
+                  label=${`Transfer ${writes} ${writes === 1 ? 'node' : 'nodes'} to ${remote}`}
+                  .state=${this._transferring ? 'waiting' : undefined}
+                  ?disabled=${writes === 0 || refused || this._loading || this._transferring || !plan}
+                  @click=${() => this.#transfer()}
+                ></uui-button>`
+          }
+          <uui-button
+            look=${this._transfer ? 'primary' : 'secondary'}
+            label="Close"
+            ?disabled=${this._transferring}
+            @click=${() => this.#close()}
+          ></uui-button>
         </div>
       </umb-body-layout>
+    `;
+  }
+
+  #renderReport(transfer: TransferResponseModel, remote: string) {
+    const failed = transfer.status !== 'Completed';
+    const rows = transfer.rows.filter((row) => !this._hideUnchanged || row.result !== 'Unchanged');
+    return html`
+      <div class="notice ${failed ? 'error' : 'done'}" role=${failed ? 'alert' : 'status'}>
+        <umb-icon name=${failed ? 'icon-alert' : 'icon-check'}></umb-icon>
+        <span>${describeTransfer(transfer, remote)}</span>
+      </div>
+      ${transfer.error && transfer.status !== 'Busy' ? html`<p class="error-text">${transfer.error}</p>` : nothing}
+      ${
+        transfer.drift.length > 0
+          ? html`<ul class="notes drift">
+              ${transfer.drift.map(
+                (drift) =>
+                  html`<li class="blocks">
+                    <umb-icon name="icon-block"></umb-icon><span>${describeDrift(drift, remote)}</span>
+                  </li>`,
+              )}
+            </ul>`
+          : nothing
+      }
+      ${
+        transfer.rows.length > 0
+          ? html`<div class="summary">
+                <small>${transfer.remoteRequests} requests to ${remote}</small>
+                <uui-toggle
+                  label="Hide unchanged"
+                  .checked=${this._hideUnchanged}
+                  @change=${(event: Event) => (this._hideUnchanged = (event.target as HTMLInputElement).checked)}
+                ></uui-toggle>
+              </div>
+              <ol class="rows">
+                ${repeat(
+                  rows,
+                  (row) => `${row.kind}/${row.key}`,
+                  (row) => this.#renderResult(row, remote),
+                )}
+              </ol>`
+          : nothing
+      }
+    `;
+  }
+
+  #renderResult(row: TransferRowResponseModel, remote: string) {
+    const look = resultLook(row.result);
+    return html`
+      <li class="row ${row.result}" data-key=${row.key}>
+        <div class="head">
+          <umb-icon class="kind" name=${row.kind === 'Media' ? 'icon-picture' : 'icon-document'}></umb-icon>
+          <strong class="name">${row.name}</strong>
+          <small>${row.outcome}</small>
+          <uui-tag color=${look.color} look=${look.look}
+            ><span class="chip"><umb-icon name=${look.icon}></umb-icon>${look.label}</span></uui-tag
+          >
+        </div>
+        ${row.targetState ? html`<div class="line">On ${remote} now: ${row.targetState}</div>` : nothing}
+        ${row.error ? html`<div class="line error-text">${row.error}</div>` : nothing}
+      </li>
     `;
   }
 
@@ -178,6 +324,19 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
         ${differs ? html`<div class="line">Differs on ${remote}: ${differs}</div>` : nothing}
         ${publish ? html`<div class="line">${publish}</div>` : nothing}
         ${
+          row.kind === 'Document' && row.outcome === 'Conflict'
+            ? html`<label class="line overwrite">
+                <input
+                  type="checkbox"
+                  .checked=${this._overwrite.has(row.key)}
+                  ?disabled=${this._transferring}
+                  @change=${(event: Event) => this.#toggleOverwrite(row.key, (event.target as HTMLInputElement).checked)}
+                />
+                Overwrite on ${remote}: replace its version there with this one
+              </label>`
+            : nothing
+        }
+        ${
           row.notes.length > 0
             ? html`<ul class="notes">
                 ${row.notes.map((note) => this.#renderNote(note, row, remote))}
@@ -241,6 +400,43 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
       .notice.error {
         border-left-color: var(--uui-color-danger);
         color: var(--uui-color-danger);
+      }
+
+      .notice.done {
+        border-left-color: var(--uui-color-positive);
+      }
+
+      .error-text {
+        color: var(--uui-color-danger);
+      }
+
+      .overwrite {
+        display: flex;
+        align-items: center;
+        gap: var(--uui-size-space-2);
+        cursor: pointer;
+      }
+
+      .overwrite input {
+        margin: 0;
+        accent-color: var(--uui-color-warning-emphasis, var(--uui-color-warning));
+      }
+
+      .drift {
+        margin-bottom: var(--uui-size-space-5);
+      }
+
+      /* Transfer results, in the same cards as the dry run; the result is in the tag's text too. */
+      .row.Written {
+        border-left-color: var(--uui-color-positive);
+      }
+
+      .row.Failed {
+        border-left-color: var(--uui-color-danger);
+      }
+
+      .row.Skipped {
+        border-left-color: var(--uui-color-warning);
       }
 
       .summary {
