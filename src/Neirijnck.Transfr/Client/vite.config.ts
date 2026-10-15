@@ -9,7 +9,9 @@ export default defineConfig({
     },
     outDir: '../wwwroot/App_Plugins/Transfr', // your web component will be saved in this location
     emptyOutDir: true,
-    sourcemap: true,
+    // No source maps: they made up a quarter of the package, TypeScript sources included. A library build in ES format
+    // keeps its line breaks and indentation (only names are shortened), so the shipped code stays readable as it is.
+    sourcemap: false,
     rollupOptions: {
       external: [/^@umbraco/],
     },
