@@ -15,4 +15,5 @@ public sealed record PlanRowResponseModel(
     IReadOnlyList<PlanNoteResponseModel> Notes,
     IReadOnlyList<string?> PublishCultures,
     IReadOnlyList<ContentDifferenceResponseModel> Differences,
-    IReadOnlyList<SchemaProblemResponseModel> SchemaProblems);
+    IReadOnlyList<SchemaProblemResponseModel> SchemaProblems,
+    string? Fingerprint);

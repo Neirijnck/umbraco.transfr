@@ -6,6 +6,7 @@ using Neirijnck.Transfr.Local;
 using Neirijnck.Transfr.Persistence;
 using Neirijnck.Transfr.Planning;
 using Neirijnck.Transfr.Remote;
+using Neirijnck.Transfr.Transfer;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
 
@@ -36,5 +37,6 @@ public class TransfrRemoteComposer : IComposer
         builder.Services.AddSingleton<DocumentDiffService>();
         builder.Services.AddSingleton<CopyHistoryStore>();
         builder.Services.AddSingleton<CopyPlanService>();
+        builder.Services.AddSingleton<TransferService>();
     }
 }

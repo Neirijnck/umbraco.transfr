@@ -13,10 +13,12 @@ namespace Neirijnck.Transfr.Planning;
 /// <param name="DocumentTypes">The name and property labels of each row's document type here.</param>
 /// <param name="SeparateInstall">Evidence that the remote was installed separately (empty when there is none).</param>
 /// <param name="RemoteRequests">Requests it cost on the remote.</param>
+/// <param name="SourceJson">The JSON here of every planned document, by key: what a transfer writes.</param>
 public sealed record CopyPlanResult(
     IReadOnlyList<PlanRow> Rows,
     IReadOnlyDictionary<Guid, string> Names,
     IReadOnlySet<Guid> SelectableHere,
     IReadOnlyDictionary<Guid, ContentTypeNames> DocumentTypes,
     IReadOnlyList<SeparateInstallEvidence> SeparateInstall,
-    int RemoteRequests);
+    int RemoteRequests,
+    IReadOnlyDictionary<Guid, string> SourceJson);

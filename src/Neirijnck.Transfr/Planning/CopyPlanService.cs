@@ -128,7 +128,7 @@ public sealed partial class CopyPlanService
             Baseline = this.history.LatestTargetUpdates(remote, sources.Select(source => source.Key).ToList()),
         });
 
-        var result = this.Describe(rows, siblings, localMedia, schema, culture, requests);
+        var result = this.Describe(rows, siblings, localMedia, schema, culture, requests) with { SourceJson = sources.ToDictionary(source => source.Key, source => source.Json) };
         var create = rows.Count(row => row.Outcome == PlanOutcome.Create);
         var conflict = rows.Count(row => row.Outcome == PlanOutcome.Conflict);
         var blocked = rows.Count(row => row.Outcome == PlanOutcome.Blocked);
@@ -275,7 +275,7 @@ public sealed partial class CopyPlanService
             .Select(note => note.Key!.Value)
             .ToHashSet();
 
-        return new CopyPlanResult(rows, names, selectable, documentTypes, schema.SeparateInstall, requests);
+        return new CopyPlanResult(rows, names, selectable, documentTypes, schema.SeparateInstall, requests, new Dictionary<Guid, string>());
     }
 
     private static Guid? DocumentTypeOf(string documentJson)

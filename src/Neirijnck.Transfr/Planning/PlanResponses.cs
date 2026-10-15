@@ -28,7 +28,8 @@ internal static class PlanResponses
             row.Notes.Select(note => Note(note, type, result)).ToList(),
             row.PublishCultures,
             row.Differences.Select(ResponseMapping.From).ToList(),
-            row.SchemaProblems.Select(ResponseMapping.From).ToList());
+            row.SchemaProblems.Select(ResponseMapping.From).ToList(),
+            row.Fingerprint);
     }
 
     private static PlanNoteResponseModel Note(PlanNote note, ContentTypeNames? type, CopyPlanResult result)
