@@ -165,6 +165,8 @@ dotnet pack src/Neirijnck.Transfr/Neirijnck.Transfr.csproj -c Release -o artifac
 
 The version is `VersionPrefix` in the project file; `src/Neirijnck.Transfr/Client/public/umbraco-package.json` must carry the same version (a unit test checks it). Pack from the commit you release: the package records that commit.
 
+CI (`.github/workflows/ci.yml`) runs the client checks, the build and the tests on every push to `master` and every pull request. A tag `vX.Y.Z` (pushed, or created with a GitHub release) also publishes that version to nuget.org through Trusted Publishing, once the checks pass and only when the tag matches `VersionPrefix`. That needs a Trusted Publishing policy on nuget.org for this repository and `ci.yml`, and a repository secret `NUGET_USER` holding the nuget.org user name.
+
 To regenerate the TypeScript API client, keep test site A running (see below) and run:
 
 ```bash
