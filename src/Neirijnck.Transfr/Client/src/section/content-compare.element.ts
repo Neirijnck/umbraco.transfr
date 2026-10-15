@@ -1083,7 +1083,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
       }
 
       /* The hover-only subtree button keeps its own opacity; the Blocked chip keeps its colour; the expander stays
-         sharp, because a blocked node can still be opened (greyed, it looked disabled: Preben couldn't open one). */
+         sharp, because a blocked node can still be opened (greyed, it looked disabled and was taken for one). */
       .row.blocked .cell > :not(.chips):not(.subtree):not(.expander),
       .row.blocked uui-tag:not(.blocked-chip),
       .tree.refused .cell > :not(.chips):not(.subtree):not(.expander),

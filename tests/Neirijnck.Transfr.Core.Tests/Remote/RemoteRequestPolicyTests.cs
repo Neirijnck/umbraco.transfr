@@ -52,8 +52,8 @@ public sealed class RemoteRequestPolicyTests
         Assert.All(methods, method => Assert.Contains(method, AllowedMethods));
     }
 
-    // The one reviewed exception to the fragment rule: reading user names (Preben's call, 2026-10-15), so a conflict can
-    // say who last changed a document on the remote. Every other user endpoint stays forbidden.
+    // The one reviewed exception to the fragment rule: reading user names, so a conflict can say who last changed a
+    // document on the remote. Every other user endpoint stays forbidden.
     private static readonly string[] AllowedDespiteFragment = ["GET " + Api + "/item/user"];
 
     [Fact]

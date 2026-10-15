@@ -46,7 +46,7 @@ export type BatchStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 const batchKey = (alias: string) => `transfr.batch.${alias}`;
 
 /**
- * The batch picked for a remote in this browser tab (Preben's call: per tab, per remote). Storage that is missing,
+ * The batch picked for a remote in this browser tab: one per tab and per remote. Storage that is missing,
  * full or blocked, or holds something else, gives an empty batch: a lost batch is picked again, never a crash.
  */
 export function loadBatch(storage: BatchStorage | undefined, alias: string): Selection {
