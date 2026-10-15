@@ -13,7 +13,7 @@
     <Product>Transfr</Product>
     <Title>Transfr</Title>
     <Description>Compare Umbraco content trees between environments side by side and copy nodes key-preserving, with a mandatory dry run.</Description>
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>1.0.0</VersionPrefix>
     <Authors>Preben Neirijnck</Authors>
     <Copyright>Preben Neirijnck</Copyright>
     <PackageTags>umbraco umbraco-marketplace content compare diff sync transfer</PackageTags>
@@ -22,6 +22,7 @@
     <RepositoryUrl>https://github.com/Neirijnck/umbraco.transfr</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
@@ -54,6 +55,7 @@
     <None Include="Client\public\umbraco-package.json" Pack="false" />
     <None Include="Client\src\**\*" Pack="false" />
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="icon.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <!-- Build the backoffice client with npm as part of dotnet build / pack -->
