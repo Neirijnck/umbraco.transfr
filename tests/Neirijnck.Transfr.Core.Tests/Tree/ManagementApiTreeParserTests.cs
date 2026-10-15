@@ -83,6 +83,23 @@ public sealed class ManagementApiTreeParserTests
     }
 
     [Fact]
+    public void ParseItemLocations_SaysWhichDocumentsArePublishedInSomeCulture()
+    {
+        // Variant states as item/document returns them in 17.7.0; a trashed item is left out as by ParseItemParents.
+        const string json = """
+            [{"isTrashed":false,"parent":null,"variants":[{"state":"Draft","culture":"en-US"},{"state":"PublishedPendingChanges","culture":"nl-BE"}],"id":"1371df8b-89da-4984-8cfb-501a72d1ad9d"},
+             {"isTrashed":false,"parent":{"id":"1371df8b-89da-4984-8cfb-501a72d1ad9d"},"variants":[{"state":"Draft","culture":null}],"id":"924c1efa-9b3d-4575-9106-166e6ed39ad1"},
+             {"isTrashed":true,"parent":{"id":"1371df8b-89da-4984-8cfb-501a72d1ad9d"},"variants":[{"state":"Trashed","culture":null}],"id":"a008f488-fde5-4f76-9e99-dd37e65c4800"}]
+            """;
+
+        var locations = ManagementApiTreeParser.ParseItemLocations(json);
+
+        Assert.Equal(new ItemLocation(null, true), locations[Home]);
+        Assert.Equal(new ItemLocation(Home, false), locations[About]);
+        Assert.False(locations.ContainsKey(News));
+    }
+
+    [Fact]
     public void ParseItemParents_ReadsMediaItemsToo()
     {
         // item/media as measured on an Umbraco 17.7.0 test site: Blue and Red asked for with a third, unknown key,

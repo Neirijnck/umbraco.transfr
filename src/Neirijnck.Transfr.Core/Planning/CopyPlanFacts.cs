@@ -19,6 +19,12 @@ public sealed class CopyPlanFacts
     /// </summary>
     public required IReadOnlySet<Guid> DocumentsOnTarget { get; init; }
 
+    /// <summary>
+    /// Those of <see cref="DocumentsOnTarget"/> that are published there in some culture: a node can only be published
+    /// under a published parent.
+    /// </summary>
+    public required IReadOnlySet<Guid> PublishedOnTarget { get; init; }
+
     /// <summary>The target's children of every parent a source would be created under (for namesakes).</summary>
     public required IReadOnlyList<TargetSibling> TargetSiblings { get; init; }
 

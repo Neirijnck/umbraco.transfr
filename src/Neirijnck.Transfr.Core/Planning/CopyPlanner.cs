@@ -49,7 +49,17 @@ public static class CopyPlanner
         }
         while (changed);
 
-        var documentRows = facts.Sources.Select(document => Row(sources[document.Key], sources, blocked, facts)).ToList();
+        // Parents come before their children, so whether a parent ends up published is known when its children are planned.
+        var documentRows = new List<PlanRow>();
+        var publishedAfter = new Dictionary<Guid, bool>();
+        foreach (var document in facts.Sources)
+        {
+            var row = Row(sources[document.Key], sources, blocked, facts, publishedAfter);
+            documentRows.Add(row);
+            publishedAfter[row.Key] = facts.PublishedOnTarget.Contains(row.Key)
+                || (row.Outcome != PlanOutcome.Blocked && row.PublishCultures.Count > 0);
+        }
+
         return [.. MediaRows(documentRows, sources, facts), .. documentRows];
     }
 
@@ -144,7 +154,12 @@ public static class CopyPlanner
         return notes;
     }
 
-    private static PlanRow Row(Source source, Dictionary<Guid, Source> sources, HashSet<Guid> blocked, CopyPlanFacts facts)
+    private static PlanRow Row(
+        Source source,
+        Dictionary<Guid, Source> sources,
+        HashSet<Guid> blocked,
+        CopyPlanFacts facts,
+        Dictionary<Guid, bool> publishedAfter)
     {
         var document = source.Document;
         var differences = source.Comparison?.Differences ?? [];
@@ -211,6 +226,15 @@ public static class CopyPlanner
 
                     break;
             }
+        }
+
+        // Measured in 17.7.0: publishing under an unpublished parent fails (and create/update-and-publish then still
+        // save the node as a draft, behind a 500). Plan the draft instead and say why.
+        if (publish.Count > 0 && document.ParentKey is { } parentKey
+            && !(publishedAfter.TryGetValue(parentKey, out var parentPublished) ? parentPublished : facts.PublishedOnTarget.Contains(parentKey)))
+        {
+            publish.Clear();
+            notes.Add(new PlanNote(PlanNoteKind.ParentNotPublished, parentKey));
         }
 
         foreach (var reference in source.References.Where(reference => reference.Kind == ReferenceKind.Media

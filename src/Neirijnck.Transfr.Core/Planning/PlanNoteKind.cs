@@ -41,6 +41,12 @@ public enum PlanNoteKind
     /// <summary>The culture is published on the target but not here: a copy never unpublishes, so this stays.</summary>
     PublishStateNotApplied,
 
+    /// <summary>
+    /// The parent is not published on the target (nor by this plan), and a node can't be published under it: saved as
+    /// a draft instead.
+    /// </summary>
+    ParentNotPublished,
+
     /// <summary>The target's node lives under another parent: a copy never moves, so it is updated where it is.</summary>
     UnderAnotherParentOnTarget,
 

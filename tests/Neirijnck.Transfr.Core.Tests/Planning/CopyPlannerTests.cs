@@ -84,6 +84,7 @@ public sealed class CopyPlannerTests
         IReadOnlyList<SourceDocument> sources,
         Dictionary<Guid, TargetDocument>? targets = null,
         Guid[]? onTarget = null,
+        Guid[]? published = null,
         TargetSibling[]? siblings = null,
         SchemaCheck[]? schema = null,
         LocalMediaItem[]? localMedia = null,
@@ -94,6 +95,7 @@ public sealed class CopyPlannerTests
             Sources = sources,
             TargetDocuments = targets ?? [],
             DocumentsOnTarget = (onTarget ?? [Home]).ToHashSet(),
+            PublishedOnTarget = (published ?? onTarget ?? [Home]).ToHashSet(),
             TargetSiblings = siblings ?? [],
             Schema = (schema ?? [Ok(PageType), Ok(OtherType)]).ToDictionary(check => check.DocumentTypeKey),
             LocalMedia = (localMedia ?? []).ToDictionary(item => item.Key),
@@ -302,6 +304,52 @@ public sealed class CopyPlannerTests
         Assert.Equal(
             [new PlanNote(PlanNoteKind.NoBaseline), new PlanNote(PlanNoteKind.DraftOnly, Culture: "nl-BE"), new PlanNote(PlanNoteKind.PublishStateNotApplied, Culture: "de-DE")],
             row.Notes);
+    }
+
+    [Fact]
+    public void Plan_SavesANodeAsADraftUnderAParentThatIsNotPublishedOnTheTarget()
+    {
+        var row = Single(Facts([Source(Page, Document(), Home)], published: []));
+
+        Assert.Equal(PlanOutcome.Create, row.Outcome);
+        Assert.Empty(row.PublishCultures);
+        Assert.Equal([new PlanNote(PlanNoteKind.ParentNotPublished, Home)], row.Notes);
+    }
+
+    [Fact]
+    public void Plan_PublishesUnderAParentThisPlanPublishes_NotUnderOneItCreatesAsADraft()
+    {
+        var published = CopyPlanner.Plan(Facts([Source(Page, Document(), Home), Source(Child, Document(), Page)]));
+        Assert.Equal([null], RowOf(published, Child).PublishCultures);
+
+        var draft = CopyPlanner.Plan(Facts([Source(Page, Document(variants: [(null, "Draft")]), Home), Source(Child, Document(), Page)]));
+        Assert.Empty(RowOf(draft, Child).PublishCultures);
+        Assert.Equal([new PlanNote(PlanNoteKind.ParentNotPublished, Page)], RowOf(draft, Child).Notes);
+    }
+
+    [Fact]
+    public void Plan_SpreadsADraftParentDownTheChain_AndPublishesAtTheRoot()
+    {
+        var rows = CopyPlanner.Plan(Facts(
+            [Source(Page, Document(), null), Source(Child, Document(), Page), Source(Other, Document(), Child, "Other")],
+            published: []));
+
+        Assert.Equal([null], RowOf(rows, Page).PublishCultures);
+        Assert.Equal([null], RowOf(rows, Child).PublishCultures);
+
+        var underDraft = CopyPlanner.Plan(Facts(
+            [Source(Child, Document(), Home), Source(Other, Document(), Child, "Other")],
+            published: []));
+        Assert.All(underDraft, row => Assert.Empty(row.PublishCultures));
+        Assert.Equal([new PlanNote(PlanNoteKind.ParentNotPublished, Child)], RowOf(underDraft, Other).Notes);
+    }
+
+    [Fact]
+    public void Plan_SaysNothingAboutTheParentOfANodeThatIsNotPublishedAnyway()
+    {
+        var row = Single(Facts([Source(Page, Document(variants: [(null, "Draft")]), Home)], published: []));
+
+        Assert.Empty(row.Notes);
     }
 
     [Fact]

@@ -87,6 +87,8 @@ export function describeNote(note: PlanNoteResponseModel, remoteName: string): s
       return `${culture} has unpublished changes here: the draft is copied, not published.`;
     case 'PublishStateNotApplied':
       return `${culture} is published on ${remoteName} but not here: it stays published, a copy never unpublishes.`;
+    case 'ParentNotPublished':
+      return `Its parent ${item} isn't published on ${remoteName}: it is saved as a draft, not published.`;
     case 'UnderAnotherParentOnTarget':
       return `It lives under ${item} on ${remoteName}: updated there, not moved.`;
     case 'MediaMissingHere':

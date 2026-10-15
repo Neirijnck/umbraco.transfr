@@ -43,6 +43,13 @@ public static class ManagementApiTreeParser
     /// <c>isTrashed</c> true and the recycle bin as its parent).
     /// </summary>
     public static IReadOnlyDictionary<Guid, Guid?> ParseItemParents(string json)
+        => ParseItemLocations(json).ToDictionary(pair => pair.Key, pair => pair.Value.ParentKey);
+
+    /// <summary>
+    /// <see cref="ParseItemParents"/>, plus whether each item is published in some culture (a document whose variant
+    /// state is Published or PublishedPendingChanges; media items carry no state and count as not published).
+    /// </summary>
+    public static IReadOnlyDictionary<Guid, ItemLocation> ParseItemLocations(string json)
     {
         using var document = JsonDocument.Parse(json);
 
@@ -51,10 +58,16 @@ public static class ManagementApiTreeParser
             .Where(item => !item.GetProperty("isTrashed").GetBoolean())
             .ToDictionary(
                 item => item.GetProperty("id").GetGuid(),
-                item => item.GetProperty("parent") is { ValueKind: JsonValueKind.Object } parent
-                    ? parent.GetProperty("id").GetGuid()
-                    : (Guid?)null);
+                item => new ItemLocation(
+                    item.GetProperty("parent") is { ValueKind: JsonValueKind.Object } parent ? parent.GetProperty("id").GetGuid() : null,
+                    IsPublished(item)));
     }
+
+    private static bool IsPublished(JsonElement item)
+        => item.TryGetProperty("variants", out var variants)
+            && variants.ValueKind == JsonValueKind.Array
+            && variants.EnumerateArray().Any(variant => variant.TryGetProperty("state", out var state)
+                && state.GetString() is "Published" or "PublishedPendingChanges");
 
     private static Guid? DocumentTypeKeyOf(JsonElement item)
         => item.TryGetProperty("documentType", out var type)

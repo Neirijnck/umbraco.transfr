@@ -79,7 +79,7 @@ public sealed partial class CopyPlanService
             .Concat(references.Where(reference => reference.Kind == ReferenceKind.Document).Select(reference => reference.Key))
             .Distinct()
             .ToList();
-        var (onTarget, locateRequests) = await this.remoteTree.LocateAsync(remote, documentKeys, cancellationToken);
+        var (onTarget, locateRequests) = await this.remoteTree.LocateDocumentsAsync(remote, documentKeys, cancellationToken);
         requests += locateRequests;
 
         // The target's children of every parent a new node would be created under: a namesake there blocks it.
@@ -109,8 +109,9 @@ public sealed partial class CopyPlanService
         var rows = CopyPlanner.Plan(new CopyPlanFacts
         {
             Sources = sources,
-            TargetDocuments = remoteJson.ToDictionary(pair => pair.Key, pair => new TargetDocument(onTarget.GetValueOrDefault(pair.Key), pair.Value)),
+            TargetDocuments = remoteJson.ToDictionary(pair => pair.Key, pair => new TargetDocument(onTarget.GetValueOrDefault(pair.Key)?.ParentKey, pair.Value)),
             DocumentsOnTarget = onTarget.Keys.ToHashSet(),
+            PublishedOnTarget = onTarget.Where(pair => pair.Value.IsPublished).Select(pair => pair.Key).ToHashSet(),
             TargetSiblings = siblings,
             Schema = schema.Checks,
             LocalMedia = localMedia,
@@ -219,7 +220,7 @@ public sealed partial class CopyPlanService
     {
         var notes = rows.SelectMany(row => row.Notes).Where(note => note.Key is not null).ToList();
         var documentKeys = notes
-            .Where(note => note.Kind is PlanNoteKind.ParentMissingOnTarget or PlanNoteKind.ParentBlocked or PlanNoteKind.MissingReference
+            .Where(note => note.Kind is PlanNoteKind.ParentMissingOnTarget or PlanNoteKind.ParentBlocked or PlanNoteKind.ParentNotPublished or PlanNoteKind.MissingReference
                 or PlanNoteKind.UnderAnotherParentOnTarget)
             .Select(note => note.Key!.Value)
             .Distinct()

@@ -59,7 +59,19 @@ public sealed class RemoteTreeReader
     /// Where these documents are on the remote: key to parent key (null = the root). Unknown and trashed keys are
     /// left out.
     /// </summary>
-    public Task<(IReadOnlyDictionary<Guid, Guid?> Parents, int Requests)> LocateAsync(
+    public async Task<(IReadOnlyDictionary<Guid, Guid?> Parents, int Requests)> LocateAsync(
+        RemoteDefinition remote,
+        IReadOnlyCollection<Guid> keys,
+        CancellationToken cancellationToken)
+    {
+        var (locations, requests) = await this.LocateItemsAsync(remote, "item/document", keys, cancellationToken);
+        return (locations.ToDictionary(pair => pair.Key, pair => pair.Value.ParentKey), requests);
+    }
+
+    /// <summary>
+    /// <see cref="LocateAsync"/>, plus whether each document is published there in some culture.
+    /// </summary>
+    public Task<(IReadOnlyDictionary<Guid, ItemLocation> Locations, int Requests)> LocateDocumentsAsync(
         RemoteDefinition remote,
         IReadOnlyCollection<Guid> keys,
         CancellationToken cancellationToken)
@@ -69,19 +81,22 @@ public sealed class RemoteTreeReader
     /// Where these media items are on the remote: key to parent folder key (null = the root). Unknown and trashed keys
     /// are left out.
     /// </summary>
-    public Task<(IReadOnlyDictionary<Guid, Guid?> Parents, int Requests)> LocateMediaAsync(
+    public async Task<(IReadOnlyDictionary<Guid, Guid?> Parents, int Requests)> LocateMediaAsync(
         RemoteDefinition remote,
         IReadOnlyCollection<Guid> keys,
         CancellationToken cancellationToken)
-        => this.LocateItemsAsync(remote, "item/media", keys, cancellationToken);
+    {
+        var (locations, requests) = await this.LocateItemsAsync(remote, "item/media", keys, cancellationToken);
+        return (locations.ToDictionary(pair => pair.Key, pair => pair.Value.ParentKey), requests);
+    }
 
-    private async Task<(IReadOnlyDictionary<Guid, Guid?> Parents, int Requests)> LocateItemsAsync(
+    private async Task<(IReadOnlyDictionary<Guid, ItemLocation> Locations, int Requests)> LocateItemsAsync(
         RemoteDefinition remote,
         string itemPath,
         IReadOnlyCollection<Guid> keys,
         CancellationToken cancellationToken)
     {
-        var parents = new Dictionary<Guid, Guid?>();
+        var locations = new Dictionary<Guid, ItemLocation>();
         var requests = 0;
         foreach (var batch in keys.Chunk(LocateBatchSize))
         {
@@ -89,12 +104,12 @@ public sealed class RemoteTreeReader
             var json = await this.client.GetStringAsync(remote, $"{RemoteRequestPolicy.ApiBase}/{itemPath}?{query}", cancellationToken);
             requests++;
 
-            foreach (var (key, parent) in ManagementApiTreeParser.ParseItemParents(json))
+            foreach (var (key, location) in ManagementApiTreeParser.ParseItemLocations(json))
             {
-                parents[key] = parent;
+                locations[key] = location;
             }
         }
 
-        return (parents, requests);
+        return (locations, requests);
     }
 }
