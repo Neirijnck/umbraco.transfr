@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using Neirijnck.Transfr.Core.History;
 using Neirijnck.Transfr.Core.Remote;
 using Umbraco.Cms.Infrastructure.Scoping;
 
@@ -11,6 +12,9 @@ public sealed class CopyHistoryStore
 {
     // Keys per IN (...) query: well under SQL Server's 2100 parameters.
     private const int KeysPerQuery = 500;
+
+    // Rows per read while paging transfers: a page usually needs one read.
+    private const int RowsPerRead = 500;
 
     private const string ToRemote = "ToRemote";
 
@@ -51,12 +55,50 @@ public sealed class CopyHistoryStore
             .ToDictionary(group => group.Key, group => ToLastCopy(group.MaxBy(row => row.Id)!));
     }
 
-    // copiedAt is written as UTC; the database hands it back without a kind.
+    /// <summary>
+    /// A page of transfers from here to the remote, newest first: up to <paramref name="take"/> transfers recorded
+    /// before the row <paramref name="before"/> (null = the latest), and the id to pass for the next page (null when
+    /// there is none).
+    /// </summary>
+    public (IReadOnlyList<TransferRecord> Transfers, int? NextBefore) ReadTransfers(RemoteDefinition remote, int? before, int take)
+    {
+        ArgumentNullException.ThrowIfNull(remote);
+        ArgumentOutOfRangeException.ThrowIfLessThan(take, 1);
+        var identity = RemoteIdentity.Of(remote.BaseUrl);
+
+        // Keyset paging on the id: the same SQL on every database, and stable while new transfers are added.
+        var rows = new List<CopyHistoryEntry>();
+        var cursor = before ?? int.MaxValue;
+        using var scope = this.scopeProvider.CreateScope(autoComplete: true);
+        while (true)
+        {
+            var chunk = scope.Database.SkipTake<CopyHistoryDto>(
+                0,
+                RowsPerRead,
+                "WHERE remote = @0 AND direction = @1 AND id < @2 ORDER BY id DESC",
+                identity,
+                ToRemote,
+                cursor);
+            rows.AddRange(chunk.Select(row => new CopyHistoryEntry(row.Id, row.DocumentKey, row.Outcome, row.UserKey, Utc(row.CopiedAt))));
+
+            var transfers = TransferHistory.Group(rows);
+            if (!TransferHistory.NeedsMoreRows(transfers, take, noMoreRows: chunk.Count < RowsPerRead))
+            {
+                return TransferHistory.Cut(transfers, take);
+            }
+
+            cursor = chunk[^1].Id;
+        }
+    }
+
     private static LastCopy ToLastCopy(CopyHistoryDto row)
         => new(
             DateTimeOffset.Parse(row.TargetUpdateDate, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
-            new DateTimeOffset(DateTime.SpecifyKind(row.CopiedAt, DateTimeKind.Utc)),
+            Utc(row.CopiedAt),
             row.UserKey);
+
+    // copiedAt is written as UTC; the database hands it back without a kind.
+    private static DateTimeOffset Utc(DateTime copiedAt) => new(DateTime.SpecifyKind(copiedAt, DateTimeKind.Utc));
 
     /// <summary>Records documents just copied from here to the remote, all in one transaction.</summary>
     public void RecordToRemote(RemoteDefinition remote, Guid userKey, IReadOnlyCollection<CopyRecord> records)
