@@ -4,6 +4,15 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 ## [Unreleased]
 
+## [18.0.0] - 2026-10-16
+
+First release for Umbraco 18 (18.2.1 and later 18.x), with the same features as 17.0.0. Both environments must run Umbraco 18; for Umbraco 17, stay on the 17.x line.
+
+### Changed
+
+- The package's API description is now built with Umbraco 18's own OpenAPI support. For developers: the document is served at `/umbraco/openapi/transfr.json` instead of `/umbraco/swagger/transfr/swagger.json`.
+- The README and the marketplace description cover both lines, including how to install the 17.x line on Umbraco 17.
+
 ## [17.0.0] - 2026-10-16
 
 The major version now follows Umbraco's: 17.x is for Umbraco 17. This release follows 1.0.1 for the same Umbraco versions and changes nothing in how Transfr is installed or configured.
