@@ -2,8 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [master]
-    tags: ['v*']
+    # master holds the newest Umbraco major; every release/umbraco-NN branch releases the Transfr NN.x line.
+    branches: [master, 'release/**']
   pull_request:
   workflow_dispatch:
 
@@ -65,48 +65,91 @@ jobs:
         run: dotnet test Neirijnck.Transfr.slnx --configuration Release --no-build
 
   publish:
-    name: Publish to nuget.org
-    # Only on a release tag (vX.Y.Z), after every gate is green.
-    if: startsWith(github.ref, 'refs/tags/v')
+    name: Publish a new version to nuget.org
+    # Only from a release branch, after every gate is green. Raising VersionPrefix there is the release: a version
+    # already on nuget.org is skipped, so any other push to the branch publishes nothing.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
     needs: [build]
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    concurrency:
+      group: publish-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
-      contents: read
+      # The tag and the GitHub release.
+      contents: write
       # Trusted Publishing: GitHub issues an OIDC token that nuget.org exchanges for a one-hour API key, so no
       # long-lived key is stored anywhere. The nuget.org policy names this repository and this file (ci.yml).
       id-token: write
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read the version and whether nuget.org has it
+        id: version
+        run: |
+          version="$(grep -oPm1 '(?<=<VersionPrefix>)[^<]+' src/Neirijnck.Transfr/Neirijnck.Transfr.csproj)"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          # The flat container answers 404 for a package that was never published, which counts as not published.
+          if curl -fsS https://api.nuget.org/v3-flatcontainer/neirijnck.transfr/index.json | grep -q "\"${version}\""; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "${version} is already on nuget.org: nothing to publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A version can never be replaced on nuget.org, so a wrong number must stop here: the branch, the version and
+      # the Umbraco dependency share their major (release/umbraco-17 releases 17.x for Umbraco 17).
+      - name: Check the version belongs on this branch
+        if: steps.version.outputs.published == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          branch_major="${GITHUB_REF_NAME#release/umbraco-}"
+          umbraco_major="$(grep -oPm1 'Include="Umbraco.Cms.Web.Common" Version="\[\K[0-9]+' Directory.Packages.props)"
+          if [ "${VERSION%%.*}" != "${branch_major}" ] || [ "${umbraco_major}" != "${branch_major}" ]; then
+            echo "::error::Branch ${GITHUB_REF_NAME}, version ${VERSION} and Umbraco ${umbraco_major} must share one major."
+            exit 1
+          fi
+
+      # The version's section in CHANGELOG.md is its release note; a release without one stops here.
+      - name: Release notes from the changelog
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          awk -v heading="## [${VERSION}]" 'index($0, heading) == 1 { found = 1; next } found && /^## / { exit } found { print }' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::CHANGELOG.md has no section for ${VERSION}."
+            exit 1
+          fi
+
       - uses: actions/setup-dotnet@v4
+        if: steps.version.outputs.published == 'false'
         with:
           dotnet-version: '10.0.x'
 
       - uses: actions/setup-node@v4
+        if: steps.version.outputs.published == 'false'
         with:
           node-version-file: src/Neirijnck.Transfr/Client/.nvmrc
           cache: npm
           cache-dependency-path: src/Neirijnck.Transfr/Client/package-lock.json
 
-      # A tag that doesn't match the version would publish the wrong number, and a version can never be replaced.
-      - name: Check the tag matches the package version
-        run: |
-          version="$(grep -oPm1 '(?<=<VersionPrefix>)[^<]+' src/Neirijnck.Transfr/Neirijnck.Transfr.csproj)"
-          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match VersionPrefix ${version}."
-            exit 1
-          fi
-
       - name: Restore
+        if: steps.version.outputs.published == 'false'
         run: dotnet restore src/Neirijnck.Transfr/Neirijnck.Transfr.csproj --locked-mode
 
       # Installs the client's packages and builds the bundle before packing.
       - name: Pack
-        run: dotnet pack src/Neirijnck.Transfr/Neirijnck.Transfr.csproj --configuration Release --no-restore --output artifacts
+        if: steps.version.outputs.published == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: >-
+          dotnet pack src/Neirijnck.Transfr/Neirijnck.Transfr.csproj --configuration Release --no-restore --output artifacts
+          "-p:PackageReleaseNotes=https://github.com/${GITHUB_REPOSITORY}/releases/tag/v${VERSION}"
 
       # Requested just before the push: the key it returns is valid for an hour.
       - name: NuGet login
+        if: steps.version.outputs.published == 'false'
         id: login
         uses: NuGet/login@v1
         with:
@@ -114,4 +157,33 @@ jobs:
 
       # No --skip-duplicate: pushing a version that already exists must fail, not pass silently.
       - name: Push
+        if: steps.version.outputs.published == 'false'
         run: dotnet nuget push artifacts/*.nupkg --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json
+
+      # Also when the version was already published, so a run that pushed but failed here heals on the next push; the
+      # tag then goes on the commit the published package names, not on this push. An older major (17.x once 18.x
+      # exists) is not marked as the latest release.
+      - name: Tag and GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PUBLISHED: ${{ steps.version.outputs.published }}
+        run: |
+          if gh release view "v${VERSION}" > /dev/null 2>&1; then
+            echo "Release v${VERSION} exists."
+            exit 0
+          fi
+          target="${GITHUB_SHA}"
+          if [ "${PUBLISHED}" = "true" ]; then
+            target="$(curl -fsS "https://api.nuget.org/v3-flatcontainer/neirijnck.transfr/${VERSION}/neirijnck.transfr.nuspec" | grep -oPm1 '<repository [^>]*commit="\K[0-9a-f]{40}')"
+            if [ -z "${target}" ]; then
+              echo "::error::No commit found in the nuspec of ${VERSION} on nuget.org."
+              exit 1
+            fi
+          fi
+          newest_major="$(curl -fsS https://api.nuget.org/v3-flatcontainer/neirijnck.transfr/index.json | grep -oP '"\K[0-9]+(?=\.)' | sort -n | tail -1)"
+          latest=true
+          if [ "${VERSION%%.*}" -lt "${newest_major:-0}" ]; then
+            latest=false
+          fi
+          gh release create "v${VERSION}" --target "${target}" --title "Transfr ${VERSION}" --notes-file release-notes.md --latest="${latest}"

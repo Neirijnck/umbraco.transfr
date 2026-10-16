@@ -170,9 +170,23 @@ To build the NuGet package (Release, client included) into `artifacts/`, which i
 dotnet pack src/Neirijnck.Transfr/Neirijnck.Transfr.csproj -c Release -o artifacts
 ```
 
-The version is `VersionPrefix` in the project file; `src/Neirijnck.Transfr/Client/public/umbraco-package.json` must carry the same version (a unit test checks it). Pack from the commit you release: the package records that commit.
+The version is `VersionPrefix` in the project file; `src/Neirijnck.Transfr/Client/public/umbraco-package.json` must carry the same version, and `CHANGELOG.md` a section for it (unit tests check both). The package records the commit it was packed from.
 
-CI (`.github/workflows/ci.yml`) runs the client checks, the build and the tests on every push to `master` and every pull request. A tag `vX.Y.Z` (pushed, or created with a GitHub release) also publishes that version to nuget.org through Trusted Publishing, once the checks pass and only when the tag matches `VersionPrefix`. That needs a Trusted Publishing policy on nuget.org for this repository and `ci.yml`, and a repository secret `NUGET_USER` holding the nuget.org user name.
+CI (`.github/workflows/ci.yml`) runs the client checks, the build and the tests on every push to `master` or a `release/**` branch and on every pull request.
+
+### Releases
+
+From 17.0.0 on, the major version is the Umbraco major the package supports: 17.x for Umbraco 17, 18.x for Umbraco 18. Each supported Umbraco major has a release branch, `release/umbraco-NN`; `master` holds the newest major. A fix goes to the oldest release branch that needs it first and is then merged forward.
+
+To release, raise `VersionPrefix` (and `umbraco-package.json`) on the release branch, move the changelog's notes under a `## [X.Y.Z] - date` heading, and push. After the checks pass, CI:
+
+1. skips everything when nuget.org already has that version, so other pushes to the branch publish nothing;
+2. refuses a version whose major differs from the branch's or from the Umbraco dependency range in `Directory.Packages.props`;
+3. takes the release notes from that version's `CHANGELOG.md` section (and refuses when there is none);
+4. packs and pushes to nuget.org through Trusted Publishing (an existing version makes the push fail, never pass silently);
+5. tags `vX.Y.Z` and creates the GitHub release "Transfr X.Y.Z" with those notes, marked as latest only for the newest major.
+
+That needs a Trusted Publishing policy on nuget.org for this repository and `ci.yml`, and a repository secret `NUGET_USER` holding the nuget.org user name. Tags are created by CI only: pushing a tag publishes nothing.
 
 The Umbraco Marketplace shows `umbraco-marketplace-readme.md` instead of this README: a copy of the part above **Repository layout** (without the logo), followed by links. Change both together; a unit test checks that the copy matches.
 
