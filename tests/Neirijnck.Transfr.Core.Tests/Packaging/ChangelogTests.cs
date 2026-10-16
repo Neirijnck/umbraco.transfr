@@ -4,7 +4,7 @@ namespace Neirijnck.Transfr.Core.Tests.Packaging;
 
 /// <summary>
 /// The release workflow takes a version's release notes from its section in CHANGELOG.md and refuses to publish
-/// without one. This catches a missing section when the version is raised, instead of on the release branch.
+/// without one. This catches a missing section when the version is raised, instead of when the version is tagged.
 /// </summary>
 public sealed class ChangelogTests
 {

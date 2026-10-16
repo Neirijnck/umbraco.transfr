@@ -1,6 +1,6 @@
 # Changelog
 
-From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x for Umbraco 17, 18.x for Umbraco 18. Each Umbraco major has its own release branch (`release/umbraco-17`, `release/umbraco-18`). The 1.0.x releases are for Umbraco 17.
+From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x for Umbraco 17, 18.x for Umbraco 18. Each supported Umbraco major has its own branch that its versions are tagged on (`feature/17` for Umbraco 17). The 1.0.x releases are for Umbraco 17.
 
 ## [Unreleased]
 
