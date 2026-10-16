@@ -24,6 +24,12 @@ public static class TransferRequests
             throw new ArgumentException($"{row.Kind} {row.Key} is {row.Outcome}: nothing to write.", nameof(row));
         }
 
+        // Writing the whole source would overwrite every field the user left alone.
+        if (row.Fields is not null)
+        {
+            throw new ArgumentException($"Document {row.Key} is a field-level copy: write it with {nameof(ForFields)}.", nameof(row));
+        }
+
         var source = DocumentJson.Parse(sourceJson, nameof(sourceJson));
 
         // A culture not created here isn't created there either, nor are its values sent. Invariant values (culture
@@ -76,6 +82,66 @@ public static class TransferRequests
         return new DocumentWrite(create ? "POST" : "PUT", path, body.ToJsonString());
     }
 
+    /// <summary>
+    /// The write for a field-level copy. <c>PUT document/{id}</c> replaces every value (measured), so the body is the
+    /// target's document with only the chosen fields taken from here: a chosen value this side lacks is cleared there,
+    /// and the template and every other field stay the target's. A chosen field in a culture the target hasn't created
+    /// creates that culture, with its name here.
+    /// </summary>
+    /// <exception cref="ArgumentException">The row is not a field-level update of a document.</exception>
+    public static DocumentWrite ForFields(PlanRow row, string sourceJson, string targetJson)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (row.Kind != PlanItemKind.Document || row.Fields is not { } fields || row.Outcome is not (PlanOutcome.Update or PlanOutcome.Conflict))
+        {
+            throw new ArgumentException($"{row.Kind} {row.Key} is {row.Outcome}{(row.Fields is null ? " as a whole node" : string.Empty)}: no fields to write.", nameof(row));
+        }
+
+        var source = DocumentJson.Parse(sourceJson, nameof(sourceJson));
+        var target = DocumentJson.Parse(targetJson, nameof(targetJson));
+        bool Chosen(JsonObject value) => fields.Any(field => field.CoversValue(
+            DocumentJson.StringOf(value["alias"]), DocumentJson.StringOf(value["culture"]), DocumentJson.StringOf(value["segment"])));
+        var values = (target["values"] as JsonArray ?? []).OfType<JsonObject>().Where(value => !Chosen(value))
+            .Concat((source["values"] as JsonArray ?? []).OfType<JsonObject>().Where(Chosen))
+            .Select(value => value.DeepClone());
+
+        var sourceVariants = Created(source);
+        var variants = Created(target).Select(variant => new JsonObject
+        {
+            ["culture"] = DocumentJson.StringOf(variant["culture"]),
+            ["segment"] = DocumentJson.StringOf(variant["segment"]),
+            ["name"] = DocumentJson.StringOf(fields.Any(field => field.CoversName(DocumentJson.StringOf(variant["culture"]), DocumentJson.StringOf(variant["segment"])))
+                ? Matching(sourceVariants, variant)?["name"] ?? variant["name"]
+                : variant["name"]),
+        }).ToList();
+        foreach (var variant in sourceVariants.Where(variant => Matching(variants, variant) is null))
+        {
+            var (culture, segment) = (DocumentJson.StringOf(variant["culture"]), DocumentJson.StringOf(variant["segment"]));
+            if (fields.Any(field => string.Equals(field.Culture, culture, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(field.Segment, segment, StringComparison.OrdinalIgnoreCase)))
+            {
+                variants.Add(new JsonObject { ["culture"] = culture, ["segment"] = segment, ["name"] = DocumentJson.StringOf(variant["name"]) });
+            }
+        }
+
+        var body = new JsonObject
+        {
+            ["values"] = new JsonArray([.. values]),
+            ["variants"] = new JsonArray([.. variants]),
+            ["template"] = Reference(DocumentJson.IdOf(target["template"])),
+        };
+        var publish = row.PublishCultures.Count > 0;
+        if (publish)
+        {
+            body["culturesToPublish"] = new JsonArray([.. row.PublishCultures.OfType<string>().Select(culture => (JsonNode)culture)]);
+        }
+
+        var path = publish
+            ? $"{RemoteRequestPolicy.ApiBase}/document/{row.Key:D}/update-and-publish"
+            : $"{RemoteRequestPolicy.ApiBase}/document/{row.Key:D}";
+        return new DocumentWrite("PUT", path, body.ToJsonString());
+    }
+
     /// <summary>The sort of a parent's children on the target into this order (null parent = the root).</summary>
     public static DocumentWrite Sort(Guid? parentKey, IReadOnlyList<Guid> order)
     {
@@ -89,4 +155,16 @@ public static class TransferRequests
     }
 
     private static JsonObject? Reference(Guid? key) => key is { } id ? new JsonObject { ["id"] = id.ToString("D") } : null;
+
+    // A document's variants that exist (a culture not created has a variant entry too).
+    private static List<JsonObject> Created(JsonObject document)
+        => [.. DocumentJson.Entries(document["variants"], withAlias: false)
+            .Select(variant => variant.Entry)
+            .Where(variant => DocumentJson.StringOf(variant["state"]) != "NotCreated")];
+
+    // The variant in the list with the same culture and segment.
+    private static JsonObject? Matching(IEnumerable<JsonObject> variants, JsonObject variant)
+        => variants.FirstOrDefault(candidate =>
+            string.Equals(DocumentJson.StringOf(candidate["culture"]), DocumentJson.StringOf(variant["culture"]), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(DocumentJson.StringOf(candidate["segment"]), DocumentJson.StringOf(variant["segment"]), StringComparison.OrdinalIgnoreCase));
 }

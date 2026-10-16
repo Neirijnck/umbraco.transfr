@@ -70,7 +70,8 @@ public sealed partial class CopyPlanService
     {
         var stopwatch = Stopwatch.StartNew();
         var culture = await this.languageService.GetDefaultIsoCodeAsync();
-        var nodes = this.Expand(selection, culture);
+        var (nodes, wholeNodes) = this.Expand(selection, culture);
+        var fields = FieldSelection.Resolve(selection.Select(choice => (choice.Key, choice.Fields)), wholeNodes);
 
         // Local reads one at a time: Umbraco's ambient scope is not thread-safe.
         var sources = new List<SourceDocument>();
@@ -78,7 +79,7 @@ public sealed partial class CopyPlanService
         {
             var json = await this.localDocuments.ReadAsync(node.Key)
                 ?? throw new PlanSelectionException("A selected document could not be read here.", [node.Key]);
-            sources.Add(new SourceDocument(node.Key, node.ParentKey, node.Name, json));
+            sources.Add(new SourceDocument(node.Key, node.ParentKey, node.Name, json, fields.GetValueOrDefault(node.Key)));
         }
 
         var remoteJson = await this.ReadRemoteDocumentsAsync(remote, sources, cancellationToken);
@@ -143,6 +144,7 @@ public sealed partial class CopyPlanService
         var result = this.Describe(rows, siblings, localMedia, schema, culture, requests) with
         {
             SourceJson = sources.ToDictionary(source => source.Key, source => source.Json),
+            TargetJson = remoteJson,
             RemoteChanges = changes,
             LastCopies = await this.DescribeLastCopiesAsync(lastCopies),
         };
@@ -153,8 +155,9 @@ public sealed partial class CopyPlanService
         return result;
     }
 
-    // The selected documents and, where asked, everything below them: parents before their children.
-    private List<LocalNode> Expand(IReadOnlyList<PlanSelection> selection, string? culture)
+    // The selected documents and, where asked, everything below them: parents before their children. Also the nodes the
+    // selection holds whole (picked without fields, or below a node picked with everything below it).
+    private (List<LocalNode> Nodes, HashSet<Guid> WholeNodes) Expand(IReadOnlyList<PlanSelection> selection, string? culture)
     {
         var selected = this.localTree.Describe(selection.Select(choice => choice.Key).Distinct().ToList(), culture);
         var missing = selection.Select(choice => choice.Key).Where(key => !selected.ContainsKey(key)).Distinct().ToList();
@@ -165,6 +168,7 @@ public sealed partial class CopyPlanService
 
         var nodes = new List<LocalNode>();
         var seen = new HashSet<Guid>();
+        var wholeNodes = new HashSet<Guid>();
 
         // Shallow choices first, so a parent comes before its children however they were picked.
         foreach (var choice in selection.OrderBy(choice => selected[choice.Key].Level))
@@ -175,9 +179,16 @@ public sealed partial class CopyPlanService
                 nodes.Add(node);
             }
 
+            if (choice.Fields is null)
+            {
+                wholeNodes.Add(node.Key);
+            }
+
             if (choice.IncludeDescendants)
             {
+                var first = nodes.Count;
                 this.AddDescendants(node, culture, nodes, seen);
+                wholeNodes.UnionWith(nodes.Skip(first).Select(descendant => descendant.Key));
             }
 
             if (nodes.Count > MaxDocuments)
@@ -186,7 +197,7 @@ public sealed partial class CopyPlanService
             }
         }
 
-        return nodes;
+        return (nodes, wholeNodes);
     }
 
     private void AddDescendants(LocalNode parent, string? culture, List<LocalNode> nodes, HashSet<Guid> seen)
@@ -367,6 +378,7 @@ public sealed partial class CopyPlanService
             documentTypes,
             schema.SeparateInstall,
             requests,
+            new Dictionary<Guid, string>(),
             new Dictionary<Guid, string>(),
             new Dictionary<Guid, RemoteChangeInfo>(),
             new Dictionary<Guid, LastCopyInfo>());

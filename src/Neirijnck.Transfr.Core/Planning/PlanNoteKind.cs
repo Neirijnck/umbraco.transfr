@@ -58,4 +58,13 @@ public enum PlanNoteKind
 
     /// <summary>A referenced media item doesn't exist here either: the reference is copied as it is.</summary>
     MediaMissingHere,
+
+    /// <summary>Blocks: a field-level copy only updates a node, and the target doesn't have this one.</summary>
+    NotOnTarget,
+
+    /// <summary>
+    /// The culture has unpublished changes on the target: the fields are saved there without publishing, so nobody's
+    /// draft goes live.
+    /// </summary>
+    TargetHasDraft,
 }

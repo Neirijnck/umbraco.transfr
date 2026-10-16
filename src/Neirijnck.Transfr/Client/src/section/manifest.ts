@@ -8,7 +8,9 @@ export const manifests: Array<UmbExtensionManifest> = [
     type: 'section',
     alias: TRANSFR_SECTION_ALIAS,
     name: 'Transfr Section',
-    weight: 10,
+    // Sections show by weight, highest first (Umbraco's own run from 1000 down to 400). A tool section goes after the
+    // site's own sections, which take positive weights.
+    weight: -100,
     meta: {
       label: 'Transfr',
       pathname: 'transfr',

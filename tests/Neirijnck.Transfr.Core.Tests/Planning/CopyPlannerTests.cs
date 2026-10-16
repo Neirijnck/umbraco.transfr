@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Nodes;
+﻿using System.Globalization;
+using System.Text.Json.Nodes;
 using Neirijnck.Transfr.Core.Content;
 using Neirijnck.Transfr.Core.Planning;
 using Neirijnck.Transfr.Core.Schema;
@@ -32,6 +33,7 @@ public sealed class CopyPlannerTests
         Guid? member = null,
         bool trashed = false,
         string updateDate = Updated,
+        string name = "Page",
         params (string? Culture, string State)[] variants)
     {
         var values = new JsonArray(Value("title", "Umbraco.TextBox", title));
@@ -59,7 +61,7 @@ public sealed class CopyPlannerTests
                 ["updateDate"] = updateDate,
                 ["culture"] = culture,
                 ["segment"] = null,
-                ["name"] = culture is null ? "Page" : $"Page {culture}",
+                ["name"] = culture is null ? name : $"{name} {culture}",
             });
         }
 
@@ -76,7 +78,15 @@ public sealed class CopyPlannerTests
     private static JsonObject Value(string alias, string editorAlias, JsonNode? value)
         => new() { ["editorAlias"] = editorAlias, ["alias"] = alias, ["culture"] = null, ["segment"] = null, ["value"] = value };
 
-    private static SourceDocument Source(Guid key, string json, Guid? parentKey = null, string name = "Page") => new(key, parentKey, name, json);
+    private static SourceDocument Source(Guid key, string json, Guid? parentKey = null, string name = "Page", params FieldChoice[] fields)
+        => new(key, parentKey, name, json, fields.Length == 0 ? null : fields);
+
+    private static FieldChoice ValueOf(string alias, string? culture = null) => new(FieldKind.Value, alias, culture, null);
+
+    private static FieldChoice NameIn(string? culture) => new(FieldKind.Name, null, culture, null);
+
+    // The target as our last copy left it, so a difference is an update rather than a conflict.
+    private static Dictionary<Guid, DateTimeOffset> CopiedAsIs(Guid key) => new() { [key] = DateTimeOffset.Parse(Updated, CultureInfo.InvariantCulture) };
 
     private static SchemaCheck Ok(Guid documentType) => new(documentType, []);
 
@@ -501,5 +511,140 @@ public sealed class CopyPlannerTests
         Assert.Equal(PlanOutcome.Blocked, row.Outcome);
         Assert.Equal(["body", "related", "links"], row.Notes.Select(note => note.PropertyAlias));
         Assert.All(row.Notes, note => Assert.Equal((PlanNoteKind.MissingReference, about), (note.Kind, note.Key!.Value)));
+    }
+
+    [Fact]
+    public void Plan_FieldLevel_CountsOnlyTheChosenFields()
+    {
+        var row = Single(Facts(
+            [Source(Page, Document(title: "New", related: Home, name: "New name"), Home, fields: ValueOf("title"))],
+            targets: new() { [Page] = new(Home, Document(title: "Old", related: Other)) },
+            onTarget: [Home, Other],
+            baseline: CopiedAsIs(Page)));
+
+        Assert.Equal(PlanOutcome.Update, row.Outcome);
+        Assert.Equal([new ContentDifference(ContentDifferenceKind.Value, "title")], row.Differences);
+        Assert.Equal([ValueOf("title")], row.Fields);
+        Assert.Equal([null], row.PublishCultures);
+        Assert.Empty(row.Notes);
+    }
+
+    [Fact]
+    public void Plan_FieldLevel_LeavesANodeUnchangedWhenOnlyOtherFieldsDiffer()
+    {
+        var row = Single(Facts(
+            [Source(Page, Document(related: Home), Home, fields: ValueOf("title"))],
+            targets: new() { [Page] = new(Home, Document(related: Other)) },
+            onTarget: [Home, Other]));
+
+        Assert.Equal(PlanOutcome.Unchanged, row.Outcome);
+        Assert.Empty(row.Differences);
+        Assert.Empty(row.PublishCultures);
+        Assert.Empty(row.Notes);
+    }
+
+    [Fact]
+    public void Plan_FieldLevel_IsBlockedOnlyByWhatItsOwnFieldsReference()
+    {
+        // Other is missing on the target: it only matters when the field linking it is carried over.
+        var target = new Dictionary<Guid, TargetDocument> { [Page] = new(Home, Document(title: "Old")) };
+        var json = Document(title: "New", related: Other);
+
+        var titleOnly = Single(Facts([Source(Page, json, Home, fields: ValueOf("title"))], targets: target, baseline: CopiedAsIs(Page)));
+        var related = Single(Facts([Source(Page, json, Home, fields: ValueOf("related"))], targets: target, baseline: CopiedAsIs(Page)));
+
+        Assert.Equal(PlanOutcome.Update, titleOnly.Outcome);
+        Assert.Equal(PlanOutcome.Blocked, related.Outcome);
+        Assert.Equal([new PlanNote(PlanNoteKind.MissingReference, Other, "related")], related.Notes);
+    }
+
+    [Fact]
+    public void Plan_FieldLevel_IsBlockedForANodeTheTargetLacks()
+    {
+        var row = Single(Facts([Source(Page, Document(), Home, fields: ValueOf("title"))]));
+
+        Assert.Equal(PlanOutcome.Blocked, row.Outcome);
+        Assert.Equal([new PlanNote(PlanNoteKind.NotOnTarget)], row.Notes);
+    }
+
+    [Fact]
+    public void Plan_FieldLevel_KeepsConflictsPerNode()
+    {
+        var row = Single(Facts(
+            [Source(Page, Document(title: "New"), Home, fields: ValueOf("title"))],
+            targets: new() { [Page] = new(Home, Document(title: "Old")) }));
+
+        Assert.Equal(PlanOutcome.Conflict, row.Outcome);
+        Assert.Equal([new PlanNote(PlanNoteKind.NoBaseline)], row.Notes);
+    }
+
+    [Theory]
+    [InlineData("Published", "Published", true, null)]
+    [InlineData("Published", "PublishedPendingChanges", false, PlanNoteKind.TargetHasDraft)]
+    [InlineData("PublishedPendingChanges", "Published", false, PlanNoteKind.DraftOnly)]
+    [InlineData("PublishedPendingChanges", "PublishedPendingChanges", false, PlanNoteKind.TargetHasDraft)]
+    [InlineData("Published", "Draft", false, null)]
+    public void Plan_FieldLevel_PublishesOnlyWhereNoDraftGoesLive(string here, string there, bool publishes, PlanNoteKind? note)
+    {
+        var row = Single(Facts(
+            [Source(Page, Document(title: "New", variants: [(null, here)]), Home, fields: ValueOf("title"))],
+            targets: new() { [Page] = new(Home, Document(title: "Old", variants: [(null, there)])) },
+            baseline: CopiedAsIs(Page)));
+
+        Assert.Equal(PlanOutcome.Update, row.Outcome);
+        Assert.Equal(publishes ? [null] : [], row.PublishCultures);
+        Assert.Equal(note is { } kind ? [new PlanNote(kind)] : [], row.Notes);
+    }
+
+    [Fact]
+    public void Plan_FieldLevel_AnInvariantFieldOfVariantContentReachesEveryCulture()
+    {
+        var row = Single(Facts(
+            [Source(Page, Document(title: "New", variants: [("en-US", "Published"), ("nl-BE", "Published")]), Home, fields: ValueOf("title"))],
+            targets: new() { [Page] = new(Home, Document(title: "Old", variants: [("en-US", "Published"), ("nl-BE", "PublishedPendingChanges")])) },
+            baseline: CopiedAsIs(Page)));
+
+        Assert.Equal(["en-US"], row.PublishCultures);
+        Assert.Equal([new PlanNote(PlanNoteKind.TargetHasDraft, Culture: "nl-BE")], row.Notes);
+    }
+
+    [Fact]
+    public void Plan_FieldLevel_ANameReachesItsOwnCultureOnly()
+    {
+        var row = Single(Facts(
+            [Source(Page, Document(name: "New", variants: [("en-US", "Published"), ("nl-BE", "Published")]), Home, fields: NameIn("EN-us"))],
+            targets: new() { [Page] = new(Home, Document(name: "Old", variants: [("en-US", "Published"), ("nl-BE", "Published")])) },
+            baseline: CopiedAsIs(Page)));
+
+        Assert.Equal([new ContentDifference(ContentDifferenceKind.Name, Culture: "en-US")], row.Differences);
+        Assert.Equal(["en-US"], row.PublishCultures);
+    }
+
+    [Fact]
+    public void Plan_FieldLevel_NeverMovesTheNode()
+    {
+        // Here Page comes first; on the target it is last. A whole-node copy puts it first, a field-level copy leaves it.
+        var facts = (params FieldChoice[] fields) => Facts(
+            [Source(Page, Document(title: "New"), Home, fields: fields)],
+            targets: new() { [Page] = new(Home, Document(title: "Old")) },
+            siblings: [new TargetSibling(Home, Other, "Other"), new TargetSibling(Home, Page, "Page")],
+            localSiblings: [new LocalSibling(Home, Page), new LocalSibling(Home, Other)],
+            baseline: CopiedAsIs(Page));
+
+        Assert.Equal([new PlanNote(PlanNoteKind.PlacedAfter)], Single(facts()).Notes);
+        Assert.Empty(Single(facts(ValueOf("title"))).Notes);
+    }
+
+    [Fact]
+    public void Plan_FieldLevel_PlansOnlyTheMediaItsOwnFieldsNeed()
+    {
+        var facts = (params FieldChoice[] fields) => Facts(
+            [Source(Page, Document(title: "New", image: Blue), Home, fields: fields)],
+            targets: new() { [Page] = new(Home, Document(title: "Old")) },
+            localMedia: [new LocalMediaItem(Blue, null, "Blue")],
+            baseline: CopiedAsIs(Page));
+
+        Assert.DoesNotContain(CopyPlanner.Plan(facts(ValueOf("title"))), row => row.Kind == PlanItemKind.Media);
+        Assert.Contains(CopyPlanner.Plan(facts(ValueOf("image"))), row => row is { Kind: PlanItemKind.Media, Key: var key } && key == Blue);
     }
 }

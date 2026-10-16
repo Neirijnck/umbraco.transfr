@@ -1,43 +1,81 @@
-import type { PlanSelectionRequestModel, TreeRowResponseModel } from '../api/index.js';
+import type { FieldChoiceRequestModel, PlanSelectionRequestModel, TreeRowResponseModel } from '../api/index.js';
 import type { RowBlock } from './schema-view.js';
 
-/** The nodes picked for a copy: key to whether everything below it comes along. Kept in the order they were picked. */
-export type Selection = ReadonlyMap<string, boolean>;
+/**
+ * How a node is picked: whole (true = with everything below it, false = this node only), or only some of its fields
+ * (picked in its diff). The whole node wins: picking it whole drops its fields.
+ */
+export type NodePick = boolean | ReadonlyArray<FieldChoiceRequestModel>;
 
-/** Picks a node (on its own) or drops it. */
+/** The nodes picked for a copy, by key, in the order they were picked. */
+export type Selection = ReadonlyMap<string, NodePick>;
+
+/** Whether a node is picked whole (not: not picked, or picked by its fields). */
+export function isWhole(pick: NodePick | undefined): pick is boolean {
+  return typeof pick === 'boolean';
+}
+
+/** Picks a node whole (on its own) or drops it; a node picked by its fields becomes whole. */
 export function toggleSelected(selection: Selection, key: string): Selection {
   const next = new Map(selection);
-  if (!next.delete(key)) {
+  if (isWhole(next.get(key))) {
+    next.delete(key);
+  } else {
     next.set(key, false);
   }
   return next;
 }
 
-/** Whether everything below a picked node comes along; a node that isn't picked is left alone. */
+/** Whether everything below a node picked whole comes along; any other node is left alone. */
 export function setIncludeDescendants(selection: Selection, key: string, include: boolean): Selection {
-  if (!selection.has(key)) {
+  if (!isWhole(selection.get(key))) {
     return selection;
   }
   return new Map(selection).set(key, include);
 }
 
-/** Picks these nodes too (on their own); nodes already picked keep their choice. */
+/** Picks these nodes too, whole (on their own); nodes already picked whole keep their choice. */
 export function addToSelection(selection: Selection, keys: Iterable<string>): Selection {
   const next = new Map(selection);
   for (const key of keys) {
-    if (!next.has(key)) {
+    if (!isWhole(next.get(key))) {
       next.set(key, false);
     }
   }
   return next;
 }
 
+/** Picks these fields of a node (none = drops it); a node picked whole keeps that, since the whole node wins. */
+export function setFields(
+  selection: Selection,
+  key: string,
+  fields: ReadonlyArray<FieldChoiceRequestModel>,
+): Selection {
+  if (isWhole(selection.get(key))) {
+    return selection;
+  }
+  const next = new Map(selection);
+  if (fields.length === 0) {
+    next.delete(key);
+  } else {
+    next.set(key, [...fields]);
+  }
+  return next;
+}
+
 export function toRequest(selection: Selection): Array<PlanSelectionRequestModel> {
-  return [...selection].map(([key, includeDescendants]) => ({ key, includeDescendants }));
+  return [...selection].map(([key, pick]) =>
+    isWhole(pick) ? { key, includeDescendants: pick } : { key, includeDescendants: false, fields: [...pick] },
+  );
 }
 
 export function fromRequest(selection: ReadonlyArray<PlanSelectionRequestModel>): Selection {
-  return new Map(selection.map((choice) => [choice.key, choice.includeDescendants]));
+  return new Map(
+    selection.map((choice): [string, NodePick] => [
+      choice.key,
+      choice.fields && choice.fields.length > 0 ? [...choice.fields] : choice.includeDescendants,
+    ]),
+  );
 }
 
 /** The part of the Web Storage API the batch needs (sessionStorage in the browser, a fake in tests). */
@@ -58,7 +96,12 @@ export function loadBatch(storage: BatchStorage | undefined, alias: string): Sel
     return fromRequest(
       parsed.filter(
         (choice): choice is PlanSelectionRequestModel =>
-          typeof choice?.key === 'string' && typeof choice?.includeDescendants === 'boolean',
+          typeof choice?.key === 'string' &&
+          typeof choice?.includeDescendants === 'boolean' &&
+          (choice.fields === undefined ||
+            choice.fields === null ||
+            (Array.isArray(choice.fields) &&
+              choice.fields.every((field: unknown) => typeof (field as { kind?: unknown })?.kind === 'string'))),
       ),
     );
   } catch (error) {
@@ -93,12 +136,19 @@ export function coverForChildren(
   return cover ?? (selection.get(key) === true ? name : undefined);
 }
 
-/** E.g. "3 nodes selected, 1 with everything below it". */
+/** E.g. "3 nodes selected, 1 with everything below it, 1 with only some fields". */
 export function describeSelection(selection: Selection): string {
   const count = selection.size;
-  const below = [...selection.values()].filter(Boolean).length;
-  const nodes = `${count} ${count === 1 ? 'node' : 'nodes'} selected`;
-  return below === 0 ? nodes : `${nodes}, ${below} with everything below ${below === 1 ? 'it' : 'them'}`;
+  const below = [...selection.values()].filter((pick) => pick === true).length;
+  const fields = [...selection.values()].filter((pick) => !isWhole(pick)).length;
+  const parts = [`${count} ${count === 1 ? 'node' : 'nodes'} selected`];
+  if (below > 0) {
+    parts.push(`${below} with everything below ${below === 1 ? 'it' : 'them'}`);
+  }
+  if (fields > 0) {
+    parts.push(`${fields} with only some fields`);
+  }
+  return parts.join(', ');
 }
 
 /**

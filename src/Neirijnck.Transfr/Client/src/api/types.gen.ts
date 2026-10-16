@@ -52,6 +52,21 @@ export type DryRunRowRequestModel = {
     fingerprint: null | string;
 };
 
+export type FieldChoiceRequestModel = {
+    kind: string;
+    alias: null | string;
+    culture: null | string;
+    segment: null | string;
+};
+
+export type FieldChoiceResponseModel = {
+    kind: string;
+    alias: null | string;
+    label: null | string;
+    culture: null | string;
+    segment: null | string;
+};
+
 export type FieldDiffResponseModel = {
     kind: string;
     culture: null | string;
@@ -99,11 +114,13 @@ export type PlanRowResponseModel = {
     fingerprint: null | string;
     changedOnRemote: null | RemoteChangeResponseModel;
     lastCopied: null | LastCopyResponseModel;
+    fields: null | Array<FieldChoiceResponseModel>;
 };
 
 export type PlanSelectionRequestModel = {
     key: string;
     includeDescendants: boolean;
+    fields?: null | Array<FieldChoiceRequestModel>;
 };
 
 export type ProblemDetails = {

@@ -10,17 +10,31 @@ import type {
 } from '../api/index.js';
 import { brandStyles } from './brand.js';
 import { blockStatusLabel, fieldLabel, fieldValue } from './diff-labels.js';
-import type { TransfrNodeDiffModalData } from './node-diff-modal.token.js';
+import {
+  batchButtonLabel,
+  batchHint,
+  hasPick,
+  nameField,
+  propertyField,
+  samePicks,
+  togglePick,
+} from './field-picks.js';
+import type { FieldPick } from './field-picks.js';
+import type { TransfrNodeDiffModalData, TransfrNodeDiffModalValue } from './node-diff-modal.token.js';
 import { problemMessage } from './problem.js';
 import { diffWords } from './text-diff.js';
 import type { DiffSegment } from './text-diff.js';
 
 /**
  * One node on both sides, side by side: the document fields, then every property, blocks block by block. Changed
- * words are marked in place. By default only what differs is shown.
+ * words are marked in place. By default only what differs is shown. Opened from the compare tree for a node that can
+ * be copied, the names and properties that differ can be picked for a field-level copy and handed to the batch.
  */
 @customElement('transfr-node-diff-modal')
-export class TransfrNodeDiffModalElement extends UmbModalBaseElement<TransfrNodeDiffModalData, never> {
+export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
+  TransfrNodeDiffModalData,
+  TransfrNodeDiffModalValue
+> {
   @state()
   private _diff?: DocumentDiffResponseModel;
 
@@ -30,9 +44,23 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<TransfrNode
   @state()
   private _onlyDifferences = true;
 
+  @state()
+  private _picks: Array<FieldPick> = [];
+
   override connectedCallback() {
     super.connectedCallback();
+    this._picks = [...(this.data?.batch?.fields ?? [])];
     void this.#load();
+  }
+
+  // Fields can be picked for a node the batch doesn't hold whole already.
+  get #canPick() {
+    return this.data?.batch !== undefined && !this.data.batch.whole;
+  }
+
+  #handBack() {
+    this.updateValue({ fields: this._picks });
+    this._submitModal();
   }
 
   async #load() {
@@ -63,11 +91,52 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<TransfrNode
     return html`
       <umb-body-layout headline=${`${name}: this environment and ${remote}`}>
         ${this.#renderBody(remote)}
-        <div slot="actions">
-          <uui-button look="primary" label="Close" @click=${() => this._rejectModal()}></uui-button>
-        </div>
+        <div slot="actions">${this.#renderActions()}</div>
       </umb-body-layout>
     `;
+  }
+
+  #renderActions() {
+    if (!this.#canPick) {
+      return html`<uui-button look="primary" label="Close" @click=${() => this._rejectModal()}></uui-button>`;
+    }
+
+    // No disabled button while the ticks match the batch: a hint says what to do, and Close is the way out.
+    const before = this.data?.batch?.fields ?? [];
+    if (samePicks(before, this._picks)) {
+      return html`
+        <span class="hint">${batchHint(before.length)}</span>
+        <uui-button look="primary" label="Close" @click=${() => this._rejectModal()}></uui-button>
+      `;
+    }
+
+    const label = batchButtonLabel(before.length, this._picks.length);
+    return html`
+      <uui-button look="secondary" label="Close" @click=${() => this._rejectModal()}></uui-button>
+      <uui-button look="primary" label=${label} @click=${() => this.#handBack()}
+        ><umb-icon name="icon-checkbox"></umb-icon> ${label}</uui-button
+      >
+    `;
+  }
+
+  // A checkbox before the label of a row that differs, when fields can be picked; an empty slot keeps rows in line.
+  #renderPick(pick: FieldPick | undefined, differs: boolean, label: string) {
+    if (!this.#canPick) {
+      return nothing;
+    }
+    if (!pick || !differs) {
+      return html`<span class="pick"></span>`;
+    }
+
+    const picked = hasPick(this._picks, pick);
+    return html`<input
+      type="checkbox"
+      class="pick"
+      aria-label=${`Copy ${label} to ${this.data?.remoteName ?? 'the remote'}`}
+      title=${picked ? `${label} goes to the batch` : `Pick ${label} for a field-level copy`}
+      .checked=${picked}
+      @change=${() => (this._picks = togglePick(this._picks, pick))}
+    />`;
   }
 
   #renderBody(remote: string) {
@@ -99,6 +168,14 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<TransfrNode
               >`
             : nothing
         }
+        ${
+          this.data?.batch?.whole
+            ? html`<span class="type"
+                ><umb-icon name="icon-checkbox"></umb-icon>In the batch as a whole node: all its fields come
+                along.</span
+              >`
+            : nothing
+        }
         <uui-toggle
           label="Only differences"
           .checked=${this._onlyDifferences}
@@ -115,7 +192,11 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<TransfrNode
                 (field) => `${field.kind}|${field.culture}|${field.segment}`,
                 (field) => html`
                   <div class="columns row ${field.differs ? 'differs' : ''}">
-                    <span class="label">${fieldLabel(field)}</span>
+                    <span class="label-cell"
+                      >${this.#renderPick(nameField(field), field.differs, fieldLabel(field))}<span class="label"
+                        >${fieldLabel(field)}</span
+                      ></span
+                    >
                     ${this.#renderText(fieldValue(field, 'local'), fieldValue(field, 'remote'), field.differs, 'local')}
                     ${this.#renderText(fieldValue(field, 'local'), fieldValue(field, 'remote'), field.differs, 'remote')}
                   </div>
@@ -127,7 +208,7 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<TransfrNode
       ${
         properties.length > 0
           ? html`<uui-box headline="Properties"
-              >${this.#renderHead(remote)}${properties.map((property) => this.#renderProperty(property, remote))}</uui-box
+              >${this.#renderHead(remote)}${properties.map((property) => this.#renderProperty(property, remote, true))}</uui-box
             >`
           : nothing
       }
@@ -149,13 +230,17 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<TransfrNode
     return count === 1 ? '1 field or property' : `${count} fields and properties`;
   }
 
-  #renderProperty(property: PropertyDiffResponseModel, remote: string): unknown {
+  // A property of the node can be picked as a field (blocks and all); a value inside a block can't on its own.
+  #renderProperty(property: PropertyDiffResponseModel, remote: string, pickable = false): unknown {
     const where = [property.culture, property.segment].filter(Boolean).join(', ');
     const value = property.value;
-    const label = html`<span class="label">
-      ${property.label} ${where ? html`<span class="culture">${where}</span>` : nothing}
-      ${property.label !== property.alias ? html`<small>${property.alias}</small>` : nothing}
-    </span>`;
+    const named = where ? `${property.label} (${where})` : property.label;
+    const label = html`<span class="label-cell"
+      >${pickable ? this.#renderPick(propertyField(property), value.differs, named) : nothing}<span class="label">
+        ${property.label} ${where ? html`<span class="culture">${where}</span>` : nothing}
+        ${property.label !== property.alias ? html`<small>${property.alias}</small>` : nothing}
+      </span></span
+    >`;
 
     return html`
       <div class="property ${value.differs ? 'differs' : ''}">
@@ -324,11 +409,33 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<TransfrNode
         background: color-mix(in srgb, var(--uui-color-selected) 6%, var(--uui-color-surface));
       }
 
+      .hint {
+        align-self: center;
+        margin-right: var(--uui-size-space-3);
+        color: var(--uui-color-text-alt);
+      }
+
+      .label-cell {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--uui-size-space-3);
+        min-width: 0;
+      }
+
       .label {
         display: flex;
         flex-direction: column;
         font-weight: bold;
         overflow-wrap: anywhere;
+      }
+
+      /* The tree's pick colour (the icon's amber), so a pick looks the same wherever it is made. */
+      .pick {
+        flex: none;
+        width: 1rem;
+        height: 1rem;
+        margin: 0.15rem 0 0;
+        accent-color: var(--transfr-color-accent);
       }
 
       .label small {

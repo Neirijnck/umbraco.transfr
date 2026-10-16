@@ -4,7 +4,8 @@
 /// One document or media item in a copy plan. Kind is Document or Media; Outcome is Create, Update, Unchanged,
 /// Conflict or Blocked. PublishCultures are the cultures published after writing (null = invariant content; empty =
 /// saved only). Differences and SchemaProblems are empty when there are none. ChangedOnRemote is set for a conflict
-/// whose last change on the remote could be read; LastCopied for a document copied to this remote before.
+/// whose last change on the remote could be read; LastCopied for a document copied to this remote before. Fields is
+/// set for a field-level copy: only those fields are carried over (and Differences are theirs).
 /// </summary>
 public sealed record PlanRowResponseModel(
     string Kind,
@@ -19,4 +20,5 @@ public sealed record PlanRowResponseModel(
     IReadOnlyList<SchemaProblemResponseModel> SchemaProblems,
     string? Fingerprint,
     RemoteChangeResponseModel? ChangedOnRemote,
-    LastCopyResponseModel? LastCopied);
+    LastCopyResponseModel? LastCopied,
+    IReadOnlyList<FieldChoiceResponseModel>? Fields);

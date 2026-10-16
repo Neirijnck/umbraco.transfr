@@ -12,6 +12,7 @@ import type {
 import { brandStyles } from './brand.js';
 import { summarizeDifferences } from './content-summary.js';
 import type { TransfrCopyPlanModalData, TransfrCopyPlanModalValue } from './copy-plan-modal.token.js';
+import { describeFields } from './field-picks.js';
 import {
   OUTCOMES,
   countOutcomes,
@@ -330,6 +331,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
             ><span class="chip"><umb-icon name=${look.icon}></umb-icon>${look.label}</span></uui-tag
           >
         </div>
+        ${row.fields?.length ? html`<div class="line">Only these fields: ${describeFields(row.fields)}</div>` : nothing}
         ${differs ? html`<div class="line">Differs on ${remote}: ${differs}</div>` : nothing}
         ${row.changedOnRemote ? html`<div class="line">${describeRemoteChange(row.changedOnRemote, remote)}</div>` : nothing}
         ${row.lastCopied ? html`<div class="line">${describeLastCopy(row.lastCopied, remote)}</div>` : nothing}

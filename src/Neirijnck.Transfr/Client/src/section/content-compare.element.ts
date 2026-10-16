@@ -14,6 +14,7 @@ import { umbOpenModal } from '@umbraco-cms/backoffice/modal';
 import { brandStyles } from './brand.js';
 import { describeDifference, summarizeDifferences } from './content-summary.js';
 import { TRANSFR_COPY_PLAN_MODAL } from './copy-plan-modal.token.js';
+import { describeFields } from './field-picks.js';
 import { TRANSFR_NODE_DIFF_MODAL } from './node-diff-modal.token.js';
 import { problemMessage } from './problem.js';
 import { blockOf, describeSeparateInstall, passesBlockOn } from './schema-view.js';
@@ -22,8 +23,10 @@ import {
   coverForChildren,
   describeSelection,
   fromRequest,
+  isWhole,
   loadBatch,
   saveBatch,
+  setFields,
   setIncludeDescendants,
   toRequest,
   toggleSelected,
@@ -254,7 +257,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
 
   // A click anywhere on a row of a node on both sides opens its diff, except on the row's own controls (expand, select,
   // Show, compare below), which do their own thing. The name stays a button so the diff is reachable by keyboard too.
-  #rowClick(event: MouseEvent, row: TreeRowResponseModel) {
+  #rowClick(event: MouseEvent, row: TreeRowResponseModel, block: RowBlock | undefined, coveredBy: string | undefined) {
     if (!row.content) {
       return;
     }
@@ -265,17 +268,20 @@ export class TransfrContentCompareElement extends UmbLitElement {
         (target) => target instanceof HTMLElement && ['BUTTON', 'UUI-BUTTON', 'INPUT', 'A'].includes(target.tagName),
       );
     if (!onControl) {
-      this.#openDiff(row);
+      this.#openDiff(row, block, coveredBy);
     }
   }
 
-  // A node found on both sides opens its diff; closing the panel rejects the promise, which is not an error.
-  #openDiff(row: TreeRowResponseModel) {
+  // A node found on both sides opens its diff. For a node that can be copied, fields can be picked there; they come
+  // back into the batch when the panel hands them back. Closing it otherwise rejects the promise, which is not an error.
+  #openDiff(row: TreeRowResponseModel, block: RowBlock | undefined, coveredBy: string | undefined) {
     const alias = this._alias;
     if (!alias) {
       return;
     }
 
+    const pick = this._selection.get(row.key);
+    const canCopy = whyNotSelectable(row, block, this._separateInstall.length > 0) === undefined;
     const remote = this._remotes?.find((candidate) => candidate.alias === alias);
     umbOpenModal(this, TRANSFR_NODE_DIFF_MODAL, {
       data: {
@@ -283,8 +289,20 @@ export class TransfrContentCompareElement extends UmbLitElement {
         remoteName: remote?.name ?? alias,
         key: row.key,
         name: row.local?.name ?? row.remote?.name ?? row.key,
+        batch: canCopy
+          ? {
+              whole: coveredBy !== undefined || isWhole(pick),
+              fields: pick !== undefined && !isWhole(pick) ? [...pick] : [],
+            }
+          : undefined,
       },
-    }).catch(() => undefined);
+    })
+      .then((value) => {
+        if (alias === this._alias) {
+          this._selection = setFields(this._selection, row.key, value.fields);
+        }
+      })
+      .catch(() => undefined);
   }
 
   // The dry run of copying the selection; it may add nodes to the selection, which come back when it closes. Closing
@@ -565,7 +583,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
           @mouseleave=${() => (this._hoverKey = undefined)}
           @focusin=${() => (this._hoverKey = row.key)}
           @focusout=${() => (this._hoverKey = undefined)}
-          @click=${(event: MouseEvent) => this.#rowClick(event, row)}
+          @click=${(event: MouseEvent) => this.#rowClick(event, row, block, coveredBy)}
         >
           ${this.#renderCell('local', parentKey, row, view.local, view.known, expanded, remoteName, block, coveredBy)}
           ${this.#renderCell('remote', parentKey, row, view.remote, view.known, expanded, remoteName, block, coveredBy)}
@@ -633,13 +651,14 @@ export class TransfrContentCompareElement extends UmbLitElement {
                     ? html`<button
                         class="name link"
                         title=${`Show ${node.name} on both sides`}
-                        @click=${() => this.#openDiff(row)}
+                        @click=${() => this.#openDiff(row, block, coveredBy)}
                       >
                         ${node.name}
                       </button>`
                     : html`<span class="name">${node.name}</span>`
                 }
                 ${side === 'local' && node.hasChildren && !coveredBy ? this.#renderBelow(row.key, name) : nothing}
+                ${side === 'local' && !coveredBy ? this.#renderPickedFields(row.key) : nothing}
                 <span class="chips">${this.#renderChips(side, row, kind, known, remoteName, block)}</span>
               `
             : this.#renderPlaceholder(side, row, kind, remoteName)
@@ -687,15 +706,30 @@ export class TransfrContentCompareElement extends UmbLitElement {
       class="pick"
       aria-label=${why ? `${name} can't be selected: ${why}` : along ? `${name}: ${along}` : title}
       title=${title}
-      .checked=${along !== undefined || (why === undefined && this._selection.has(row.key))}
+      .checked=${along !== undefined || (why === undefined && isWhole(this._selection.get(row.key)))}
       ?disabled=${why !== undefined || along !== undefined}
       @change=${() => (this._selection = toggleSelected(this._selection, row.key))}
     />`;
   }
 
-  // For a picked node with children: whether everything below it comes along. Shown only once it is picked.
+  // A node picked by some of its fields (in its diff): how many, with their names as the tooltip.
+  #renderPickedFields(key: string) {
+    const pick = this._selection.get(key);
+    if (pick === undefined || isWhole(pick)) {
+      return nothing;
+    }
+
+    const count = `${pick.length} ${pick.length === 1 ? 'field' : 'fields'}`;
+    return html`<span
+      class="chip picked-fields"
+      title=${`Only these fields go along: ${describeFields(pick)}. Open the node to change them, or tick it to copy it whole.`}
+      ><umb-icon name="icon-checkbox"></umb-icon>${count}</span
+    >`;
+  }
+
+  // For a node picked whole with children: whether everything below it comes along. Shown only once it is picked.
   #renderBelow(key: string, name: string) {
-    if (!this._selection.has(key)) {
+    if (!isWhole(this._selection.get(key))) {
       return nothing;
     }
 
@@ -1134,6 +1168,15 @@ export class TransfrContentCompareElement extends UmbLitElement {
         align-items: center;
         gap: var(--uui-size-space-1);
         white-space: nowrap;
+      }
+
+      /* A node in the batch by some fields: outlined in the pick colour, like the tree's pick checkboxes. */
+      .picked-fields {
+        flex: none;
+        padding: 0 var(--uui-size-space-2);
+        border: 1px solid var(--transfr-color-accent);
+        border-radius: var(--uui-border-radius);
+        font-size: var(--uui-type-small-size);
       }
 
       /* Only on this side: a solid accent and a tint. */

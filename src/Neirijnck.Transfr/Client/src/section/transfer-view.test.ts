@@ -16,6 +16,7 @@ const row = (key: string, outcome: string, kind = 'Document'): PlanRowResponseMo
   fingerprint: kind === 'Document' ? `${key}|absent` : null,
   changedOnRemote: null,
   lastCopied: null,
+  fields: null,
 });
 
 const result = (key: string, outcome: string): TransferRowResponseModel => ({
