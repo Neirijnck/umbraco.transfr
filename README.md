@@ -8,6 +8,7 @@ Content compare for Umbraco 17: compare the content trees of two environments si
 
 - NuGet: `Neirijnck.Transfr`
 - Umbraco: 17.7.0 and later 17.x, on both sides
+- Versions: the major version follows Umbraco's, so Transfr 17.x is for Umbraco 17 (1.0.x were its first releases for Umbraco 17). Changes per version: [CHANGELOG.md](https://github.com/Neirijnck/umbraco.transfr/blob/master/CHANGELOG.md)
 - Licence: MIT
 
 ## What it does
