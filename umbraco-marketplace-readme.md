@@ -81,8 +81,13 @@ The Transfr section has three views.
 
 This environment's content tree next to a remote's, compared by key one level at a time as you expand it. Every node that exists on both sides is marked when its content or its place among its siblings differs.
 
+![The Content view: this environment's tree next to the remote's, with changed nodes, a node in another order and nodes on one side only marked](https://raw.githubusercontent.com/Neirijnck/umbraco.transfr/master/assets/screenshots/compare.png)
+
 - **Compare everything**, or the button on a node, compares a whole branch at once (up to 2,000 nodes) and opens the tree down to each difference.
 - Clicking a node that is on both sides shows it on both sides, property by property and block by block, with the changed words marked.
+
+  ![The diff panel: one node on both sides, with the changed words in the rich text and in a block marked](https://raw.githubusercontent.com/Neirijnck/umbraco.transfr/master/assets/screenshots/diff.png)
+
 - A node whose document type is missing or different on the other side is greyed out with the reason.
 - Tick nodes in the left tree, each on its own or with everything below it. The selection is kept per browser tab and remote until a transfer completes.
 - **Dry run** shows per node what a copy to the remote would do: create, update, leave unchanged, skip as a conflict (with who last changed it on the remote, and when), or refuse with the reason; which cultures it would publish, which media it needs, and when and by whom it was last copied there. A missing parent or linked page can be added to the selection from there. A dry run reads both sides and changes nothing.
@@ -91,6 +96,8 @@ This environment's content tree next to a remote's, compared by key one level at
 ### History
 
 Every transfer from this environment to a remote, newest first, with when, by whom and the nodes it created or updated. Clicking a node that is still here shows it on both sides.
+
+![The History view: two transfers to the remote, each with its time, user and the nodes it created or updated](https://raw.githubusercontent.com/Neirijnck/umbraco.transfr/master/assets/screenshots/history.png)
 
 ### Remotes
 

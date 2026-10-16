@@ -12,5 +12,19 @@
   "PackageType": "Package",
   "DocumentationUrl": "https://github.com/Neirijnck/umbraco.transfr/blob/master/README.md",
   "IssueTrackerUrl": "https://github.com/Neirijnck/umbraco.transfr/issues",
-  "Tags": [ "content", "compare", "diff", "sync", "deployment" ]
+  "Tags": [ "content", "compare", "diff", "sync", "deployment" ],
+  "Screenshots": [
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/Neirijnck/umbraco.transfr/master/assets/screenshots/compare.png",
+      "Caption": "Compare this environment's content tree with a remote's, with every difference marked"
+    },
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/Neirijnck/umbraco.transfr/master/assets/screenshots/diff.png",
+      "Caption": "One node on both sides, property by property and block by block, with the changed words marked"
+    },
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/Neirijnck/umbraco.transfr/master/assets/screenshots/history.png",
+      "Caption": "Every transfer to a remote: when, by whom and which nodes it created or updated"
+    }
+  ]
 }
