@@ -4,13 +4,17 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 ## [Unreleased]
 
+## [17.0.0] - 2026-10-16
+
+The major version now follows Umbraco's: 17.x is for Umbraco 17. This release follows 1.0.1 for the same Umbraco versions and changes nothing in how Transfr is installed or configured.
+
 ### Fixed
 
 - A node created by a transfer is now put where the dry run placed it among its siblings, also when the remote has nodes of its own after that place. Before, it stayed last on the remote.
 
 ### Changed
 
-- The README shows screenshots of the compare tree, the diff panel and the history.
+- The README shows screenshots of the compare tree, the diff panel and the history, and explains the version numbers.
 
 ## [1.0.1] - 2026-10-15
 
