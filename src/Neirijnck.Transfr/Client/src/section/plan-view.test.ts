@@ -124,6 +124,11 @@ describe('describeNote', () => {
       'nl-BE has unpublished changes here: the draft is copied, not published.',
     ],
     [note('DraftOnly'), 'The content has unpublished changes here: the draft is copied, not published.'],
+    [note('NotOnTarget'), "It isn't on B: fields can only be copied to a node that is there."],
+    [
+      note('TargetHasDraft', { culture: 'nl-BE' }),
+      "nl-BE has unpublished changes on B: the fields are saved there, not published, so nobody's draft goes live.",
+    ],
     [note('UnderAnotherParentOnTarget', { name: 'News' }), 'It lives under "News" on B: updated there, not moved.'],
     [
       note('PlacedAfter', { key: 'k', name: 'News' }),

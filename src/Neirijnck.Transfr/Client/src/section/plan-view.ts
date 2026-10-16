@@ -132,6 +132,10 @@ export function describeNote(note: PlanNoteResponseModel, remoteName: string): s
       return `It lives under ${item} on ${remoteName}: updated there, not moved.`;
     case 'MediaMissingHere':
       return `${inProperty} uses a media item that doesn't exist here either: the reference is copied as it is.`;
+    case 'NotOnTarget':
+      return `It isn't on ${remoteName}: fields can only be copied to a node that is there.`;
+    case 'TargetHasDraft':
+      return `${culture} has unpublished changes on ${remoteName}: the fields are saved there, not published, so nobody's draft goes live.`;
     default:
       return note.kind;
   }

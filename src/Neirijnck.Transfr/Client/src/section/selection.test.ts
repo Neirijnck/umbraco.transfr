@@ -5,13 +5,16 @@ import {
   coverForChildren,
   describeSelection,
   fromRequest,
+  isWhole,
   loadBatch,
   saveBatch,
+  setFields,
   setIncludeDescendants,
   toRequest,
   toggleSelected,
   whyNotSelectable,
 } from './selection.js';
+import type { NodePick } from './selection.js';
 
 const row = (status: string): TreeRowResponseModel => ({ key: 'r', status, orderDiffers: false });
 
@@ -59,9 +62,49 @@ describe('selection', () => {
     expect([...fromRequest(toRequest(picked))]).toEqual([...picked]);
   });
 
+  const title = { kind: 'Value', alias: 'title', culture: null, segment: null };
+
+  it('picks some fields of a node, and drops the node when none are left', () => {
+    const picked = setFields(new Map(), 'a', [title]);
+    expect([...picked]).toEqual([['a', [title]]]);
+    expect(isWhole(picked.get('a'))).toBe(false);
+    expect(setFields(picked, 'a', []).size).toBe(0);
+  });
+
+  it('lets the whole node win over its fields', () => {
+    const whole = setFields(new Map([['a', true]]), 'a', [title]);
+    expect(whole.get('a')).toBe(true);
+
+    const byFields = setFields(new Map(), 'a', [title]);
+    expect(toggleSelected(byFields, 'a').get('a')).toBe(false);
+    expect(addToSelection(byFields, ['a']).get('a')).toBe(false);
+    expect(setIncludeDescendants(byFields, 'a', true).get('a')).toEqual([title]);
+    expect(coverForChildren(byFields, 'a', 'A', undefined)).toBeUndefined();
+  });
+
+  it('sends picked fields with the node, never with everything below it', () => {
+    const picked = new Map<string, NodePick>([
+      ['a', [title]],
+      ['b', true],
+    ]);
+    expect(toRequest(picked)).toEqual([
+      { key: 'a', includeDescendants: false, fields: [title] },
+      { key: 'b', includeDescendants: true },
+    ]);
+    expect([...fromRequest(toRequest(picked))]).toEqual([...picked]);
+    expect(fromRequest([{ key: 'c', includeDescendants: false, fields: [] }]).get('c')).toBe(false);
+  });
+
   it.each([
     [new Map([['a', false]]), '1 node selected'],
     [new Map([['a', true]]), '1 node selected, 1 with everything below it'],
+    [
+      new Map<string, NodePick>([
+        ['a', true],
+        ['b', [title]],
+      ]),
+      '2 nodes selected, 1 with everything below it, 1 with only some fields',
+    ],
     [
       new Map([
         ['a', true],
@@ -103,6 +146,23 @@ describe('batch storage', () => {
       ['y', false],
     ]);
     expect([...loadBatch(storage, 'c')]).toEqual([['z', false]]);
+  });
+
+  it('keeps picked fields, and drops a stored pick whose fields it can not read', () => {
+    const storage = memory();
+    const title = { kind: 'Value', alias: 'title', culture: null, segment: null };
+    saveBatch(storage, 'b', new Map<string, NodePick>([['x', [title]]]));
+    expect([...loadBatch(storage, 'b')]).toEqual([['x', [title]]]);
+
+    storage.items.set(
+      'transfr.batch.b',
+      JSON.stringify([
+        { key: 'x', includeDescendants: false, fields: [{ alias: 'title' }] },
+        { key: 'y', includeDescendants: false, fields: 'title' },
+        { key: 'z', includeDescendants: false, fields: null },
+      ]),
+    );
+    expect([...loadBatch(storage, 'b')]).toEqual([['z', false]]);
   });
 
   it('removes an empty batch', () => {
