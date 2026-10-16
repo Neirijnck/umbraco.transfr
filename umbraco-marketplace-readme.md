@@ -2,7 +2,7 @@
 
 Content compare for Umbraco 17: compare the content trees of two environments side by side, see a field-level diff per node, and copy nodes from one environment to another, key-preserving and always via a dry run first.
 
-> Copying documents from this environment to a remote works end to end; media, the other direction and field-level copies are on the [roadmap](#roadmap). Try it on environments you can restore first.
+> Copying documents from this environment to a remote works end to end, whole or field by field; media and the other direction are on the [roadmap](#roadmap). Try it on environments you can restore first.
 
 - NuGet: `Neirijnck.Transfr`
 - Umbraco: 17.7.0 and later 17.x, on both sides
@@ -16,7 +16,7 @@ Install it on the environment you compare **from** (typically your own machine o
 - **Compare** the content tree here with the remote's, by key, one level at a time or a whole branch at once. Nodes that exist on one side only, live under another parent, sit in another order among their siblings, or differ in content are marked in the trees.
 - **Diff** one node on both sides, property by property and block by block, with the changed words marked.
 - **Check the schema** behind every node: a node whose document type (or anything it uses: compositions, data types, block element types) is missing or different on the other side can't be copied. A remote that was installed separately, so that the same document types have other keys, is refused as a whole.
-- **Dry run** a copy of the nodes you pick: per node, create, update, leave unchanged, skip as a conflict, or refuse with the reason.
+- **Dry run** a copy of the nodes you pick, whole or only some of their fields: per node, create, update, leave unchanged, skip as a conflict, or refuse with the reason.
 - **Transfer** exactly that dry run to the remote, with the same keys, published where they are published here, in the same place among their siblings.
 - **History** of every transfer to a remote: when, by whom, and which nodes it created or updated.
 
@@ -91,6 +91,7 @@ This environment's content tree next to a remote's, compared by key one level at
 
 - A node whose document type is missing or different on the other side is greyed out with the reason.
 - Tick nodes in the left tree, each on its own or with everything below it. The selection is kept per browser tab and remote until a transfer completes.
+- To copy only some fields of a node, tick the names and properties that differ in its diff and add them to the selection. A block list or grid is one field. Only those fields are written; everything else on the remote stays as it is. They are published only where both sides are published without unpublished changes, so nobody's draft goes live; otherwise they are saved as a draft there. A node ticked whole in the tree is copied whole.
 - **Dry run** shows per node what a copy to the remote would do: create, update, leave unchanged, skip as a conflict (with who last changed it on the remote, and when), or refuse with the reason; which cultures it would publish, which media it needs, and when and by whom it was last copied there. A missing parent or linked page can be added to the selection from there. A dry run reads both sides and changes nothing.
 - Tick **Overwrite** on a conflict to replace the remote's version anyway, and choose **Transfer** to carry out exactly that dry run. The report shows per node what happened.
 
@@ -106,7 +107,7 @@ The remotes, with a connection test per remote, and the form to connect one at r
 
 ## Current limitations
 
-- Only from this environment to a remote, and only whole nodes.
+- Only from this environment to a remote. Fields can only be copied to a node the remote has already.
 - Media are not copied yet. A node that uses a media item the remote doesn't have is still copied, with the reference as it is; the dry run lists the missing media.
 - A node that references a member can't be copied: members are never copied.
 - Both environments must come from the same installation (for example staging restored from production), so their document types share keys.
@@ -116,7 +117,6 @@ The remotes, with a connection test per remote, and the form to connect one at r
 
 Planned, not in this version:
 
-- **Field-level transfer**: pick properties (per culture), the name or the publish state in the diff panel, and copy only those.
 - **Media**: copy missing media items, with their folders and files, with the same keys.
 - **The other direction**: copy from a remote to this environment.
 - **Compare with…**: an action on a content node that opens the compare at that branch.

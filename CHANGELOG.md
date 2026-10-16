@@ -4,6 +4,14 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 ## [Unreleased]
 
+### Added
+
+- Field-level transfer: in a node's diff, tick the names and properties that differ and add them to the selection. Only those fields are written to the remote (a block list or grid is one field); everything else there stays as it is. They are published only where both sides are published without unpublished changes, otherwise saved as a draft there, so nobody's draft goes live. A node ticked whole is copied whole.
+
+### Changed
+
+- The Transfr section comes after a site's own sections in the backoffice header.
+
 ## [17.0.0] - 2026-10-16
 
 The major version now follows Umbraco's: 17.x is for Umbraco 17. This release follows 1.0.1 for the same Umbraco versions and changes nothing in how Transfr is installed or configured.
