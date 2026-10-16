@@ -76,8 +76,8 @@ function Start-TestSite([string] $Name, [switch] $Seed, [switch] $ConfiguredRemo
     }
 }
 
-# Waits until the site reports runtime level Run (and, with -LogLine, until that text appears in its console log).
-function Wait-TestSite([string] $Name, [System.Diagnostics.Process] $Process, [string] $LogLine, [int] $TimeoutSeconds = 300) {
+# Waits until the site reports runtime level Run (and, with -LogLine, until every given text appears in its console log).
+function Wait-TestSite([string] $Name, [System.Diagnostics.Process] $Process, [string[]] $LogLine, [int] $TimeoutSeconds = 300) {
     $status = "$(Get-TestSiteUrl $Name)/umbraco/management/api/v1/server/status"
     $log = Join-Path (Get-TestSitePath $Name) 'logs/stdout.log'
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -89,7 +89,7 @@ function Wait-TestSite([string] $Name, [System.Diagnostics.Process] $Process, [s
             $running = (Invoke-RestMethod $status -SkipCertificateCheck -TimeoutSec 5).serverStatus -eq 'Run'
         }
         catch { $running = $false }
-        $logged = -not $LogLine -or ((Test-Path $log) -and (Select-String -Path $log -SimpleMatch $LogLine -Quiet))
+        $logged = -not $LogLine -or ((Test-Path $log) -and @($LogLine | Where-Object { -not (Select-String -Path $log -SimpleMatch $_ -Quiet) }).Count -eq 0)
         if ($running -and $logged) { return }
         Start-Sleep -Seconds 2
     }

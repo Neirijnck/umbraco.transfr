@@ -20,7 +20,9 @@ foreach ($name in 'A', 'C') {
     Initialize-TestSiteFolder $name | Out-Null
     $process = Start-TestSite $name -Seed
     try {
-        Wait-TestSite $name $process -LogLine 'Seeded test content'
+        # Both seeders run after startup, the API user's last: stopping the site before it logs can leave its client
+        # id saved without the sign-in client behind it, which every later start then takes as done.
+        Wait-TestSite $name $process -LogLine 'Seeded test content', 'Created client credentials'
         Write-Host "Site $name installed and seeded."
     }
     finally {
