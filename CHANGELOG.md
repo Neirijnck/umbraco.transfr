@@ -4,6 +4,13 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 ## [Unreleased]
 
+## [18.0.1] - 2026-10-16
+
+### Changed
+
+- Supports Umbraco 18.1.0 and later 18.x, instead of 18.2.1 and later. Measured on 18.1.0 like on 18.2.1.
+- The README says that the remote must run such a version too: a remote on Umbraco 18.0.x can be compared but can't receive copies, because it lacks the endpoints that save and publish in one step.
+
 ## [18.0.0] - 2026-10-16
 
 First release for Umbraco 18 (18.2.1 and later 18.x), with the same features as 17.0.0. Both environments must run Umbraco 18; for Umbraco 17, stay on the 17.x line.
