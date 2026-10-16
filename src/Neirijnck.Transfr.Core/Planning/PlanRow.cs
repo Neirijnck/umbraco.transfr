@@ -21,6 +21,7 @@ namespace Neirijnck.Transfr.Core.Planning;
 /// <param name="Fingerprint">
 /// For a document: what the dry run saw of it on both sides; a transfer refuses when it changed since.
 /// </param>
+/// <param name="Fields">For a field-level copy: the fields carried over (the differences are theirs only); null = the whole node.</param>
 public sealed record PlanRow(
     PlanItemKind Kind,
     Guid Key,
@@ -32,4 +33,5 @@ public sealed record PlanRow(
     IReadOnlyList<string?> PublishCultures,
     IReadOnlyList<ContentDifference> Differences,
     IReadOnlyList<SchemaProblem> SchemaProblems,
-    string? Fingerprint = null);
+    string? Fingerprint = null,
+    IReadOnlyList<FieldChoice>? Fields = null);

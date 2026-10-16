@@ -70,7 +70,9 @@ public static class CopyPlanner
     private static List<PlanRow> PlaceAmongSiblings(List<PlanRow> rows, Dictionary<Guid, Source> sources, CopyPlanFacts facts)
     {
         var placed = new Dictionary<Guid, PlanNote>();
+        // A field-level copy only changes fields, never the node's place.
         var moving = rows
+            .Where(row => row.Fields is null)
             .Where(row => row.Outcome is PlanOutcome.Create or PlanOutcome.Update or PlanOutcome.Unchanged)
             .Where(row => sources[row.Key].Target is not { } target || target.ParentKey == row.ParentKey);
         foreach (var group in moving.GroupBy(row => row.ParentKey))
@@ -106,6 +108,14 @@ public static class CopyPlanner
 
         facts.TargetDocuments.TryGetValue(document.Key, out var target);
         var targetJson = target is null ? null : DocumentJson.Parse(target.Json, nameof(facts));
+
+        // A field-level copy only carries its fields, so only what they reference can block it or needs media.
+        var references = ReferenceExtractor.Extract(document.Json);
+        if (document.Fields is { } fields)
+        {
+            references = [.. references.Where(reference => fields.Any(field => field.Covers(reference)))];
+        }
+
         return new Source(
             document,
             json,
@@ -113,7 +123,7 @@ public static class CopyPlanner
             schema,
             target,
             targetJson,
-            ReferenceExtractor.Extract(document.Json),
+            references,
             target is null ? null : ContentComparer.Compare(document.Json, target.Json));
     }
 
@@ -139,10 +149,15 @@ public static class CopyPlanner
             }
 
             // Identical content writes nothing, so what it references is already there as it is.
-            if (notes.Count > 0 || source.Comparison!.IsIdentical)
+            if (notes.Count > 0 || IsIdentical(source))
             {
                 return notes;
             }
+        }
+        else if (source.Document.Fields is not null)
+        {
+            notes.Add(new PlanNote(PlanNoteKind.NotOnTarget));
+            return notes;
         }
         else
         {
@@ -193,12 +208,12 @@ public static class CopyPlanner
         Dictionary<Guid, bool> publishedAfter)
     {
         var document = source.Document;
-        var differences = source.Comparison?.Differences ?? [];
+        var differences = Differences(source);
         var schemaProblems = source.Schema.Problems;
         if (blocked.Contains(document.Key))
         {
             return new PlanRow(PlanItemKind.Document, document.Key, document.ParentKey, document.Name, source.DocumentTypeKey, PlanOutcome.Blocked,
-                BlockingNotes(source, sources, blocked, facts), [], differences, schemaProblems, Fingerprint(source));
+                BlockingNotes(source, sources, blocked, facts), [], differences, schemaProblems, Fingerprint(source), document.Fields);
         }
 
         var notes = new List<PlanNote>();
@@ -212,9 +227,9 @@ public static class CopyPlanner
         {
             outcome = PlanOutcome.Create;
         }
-        else if (source.Comparison!.IsIdentical)
+        else if (IsIdentical(source))
         {
-            return new PlanRow(PlanItemKind.Document, document.Key, document.ParentKey, document.Name, source.DocumentTypeKey, PlanOutcome.Unchanged, notes, [], differences, schemaProblems, Fingerprint(source));
+            return new PlanRow(PlanItemKind.Document, document.Key, document.ParentKey, document.Name, source.DocumentTypeKey, PlanOutcome.Unchanged, notes, [], differences, schemaProblems, Fingerprint(source), document.Fields);
         }
         else if (!facts.Baseline.TryGetValue(document.Key, out var copiedAt))
         {
@@ -233,7 +248,12 @@ public static class CopyPlanner
 
         var publish = new List<string?>();
         var targetVariants = DocumentJson.Entries(source.TargetJson?["variants"], withAlias: false);
-        foreach (var (key, variant) in DocumentJson.Entries(source.Json["variants"], withAlias: false))
+        if (document.Fields is not null)
+        {
+            publish.AddRange(FieldPublish(source, differences, notes));
+        }
+
+        foreach (var (key, variant) in document.Fields is null ? DocumentJson.Entries(source.Json["variants"], withAlias: false) : [])
         {
             var culture = DocumentJson.StringOf(variant["culture"]);
             switch (DocumentJson.StringOf(variant["state"]))
@@ -275,8 +295,71 @@ public static class CopyPlanner
             notes.Add(new PlanNote(PlanNoteKind.MediaMissingHere, reference.Key, reference.PropertyAlias, reference.Culture));
         }
 
-        return new PlanRow(PlanItemKind.Document, document.Key, document.ParentKey, document.Name, source.DocumentTypeKey, outcome, notes, publish, differences, schemaProblems, Fingerprint(source));
+        return new PlanRow(PlanItemKind.Document, document.Key, document.ParentKey, document.Name, source.DocumentTypeKey, outcome, notes, publish, differences, schemaProblems, Fingerprint(source), document.Fields);
     }
+
+    /// <summary>
+    /// The cultures a field-level copy publishes. It goes live only where no draft goes with it: a culture is published
+    /// when it is published without pending changes on both sides; otherwise its fields are saved only, with a note.
+    /// The cultures are those of the differing fields; an invariant field of culture-variant content goes live with
+    /// every culture.
+    /// </summary>
+    private static List<string?> FieldPublish(Source source, IReadOnlyList<ContentDifference> differences, List<PlanNote> notes)
+    {
+        var cultures = DocumentJson.Entries(source.Json["variants"], withAlias: false)
+            .Select(entry => DocumentJson.StringOf(entry.Entry["culture"]))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var variesByCulture = cultures.Any(culture => culture is not null);
+        var reached = new HashSet<string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var difference in differences)
+        {
+            if (!variesByCulture || difference.Culture is null)
+            {
+                reached.UnionWith(cultures);
+            }
+            else
+            {
+                reached.Add(difference.Culture);
+            }
+        }
+
+        var publish = new List<string?>();
+        foreach (var culture in cultures.Where(reached.Contains))
+        {
+            switch (StateOf(source.TargetJson, culture))
+            {
+                case "PublishedPendingChanges":
+                    notes.Add(new PlanNote(PlanNoteKind.TargetHasDraft, Culture: culture));
+                    break;
+                case "Published" when StateOf(source.Json, culture) == "Published":
+                    publish.Add(culture);
+                    break;
+                case "Published":
+                    notes.Add(new PlanNote(PlanNoteKind.DraftOnly, Culture: culture));
+                    break;
+            }
+        }
+
+        return publish;
+    }
+
+    // The state of a document's variant in a culture (no segment); null when the document or the variant is missing.
+    private static string? StateOf(JsonObject? json, string? culture)
+        => DocumentJson.StringOf(DocumentJson.Entries(json?["variants"], withAlias: false)
+            .Select(entry => entry.Entry)
+            .FirstOrDefault(variant => string.Equals(DocumentJson.StringOf(variant["culture"]), culture, StringComparison.OrdinalIgnoreCase)
+                && DocumentJson.StringOf(variant["segment"]) is null)?["state"]);
+
+    // The differences that count: all of them, or for a field-level copy only those in its fields.
+    private static IReadOnlyList<ContentDifference> Differences(Source source)
+        => source.Document.Fields is { } fields
+            ? [.. (source.Comparison?.Differences ?? []).Where(difference => fields.Any(field => field.Covers(difference)))]
+            : source.Comparison?.Differences ?? [];
+
+    // Whether a copy would write nothing to the target's node (which must exist).
+    private static bool IsIdentical(Source source)
+        => source.Document.Fields is null ? source.Comparison!.IsIdentical : Differences(source).Count == 0;
 
     // The media the written documents reference that the target lacks, each after the folders it needs.
     private static List<PlanRow> MediaRows(List<PlanRow> documentRows, Dictionary<Guid, Source> sources, CopyPlanFacts facts)

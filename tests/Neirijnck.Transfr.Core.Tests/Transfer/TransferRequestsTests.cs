@@ -123,4 +123,105 @@ public sealed class TransferRequestsTests
             body["sorting"]!.AsArray().Select(item => (item!["id"]!.GetValue<string>(), item["sortOrder"]!.GetValue<int>())));
         Assert.Null(Body(TransferRequests.Sort(null, [Key]))["parent"]);
     }
+
+    private static readonly Guid TheirTemplate = new("88888888-8888-4888-8888-888888888888");
+
+    private static PlanRow FieldRow(PlanOutcome outcome, FieldChoice[] fields, params string?[] publish) => Row(outcome, publish) with { Fields = fields };
+
+    private static FieldChoice ValueOf(string alias, string? culture = null) => new(FieldKind.Value, alias, culture, null);
+
+    // A document with values (alias, culture, value) and variants (culture, name, state).
+    private static string Document(Guid template, (string Alias, string? Culture, string Value)[] values, params (string? Culture, string Name, string State)[] variants)
+        => new JsonObject
+        {
+            ["template"] = new JsonObject { ["id"] = template.ToString() },
+            ["documentType"] = new JsonObject { ["id"] = PageType.ToString() },
+            ["values"] = new JsonArray([.. values.Select(value => (JsonNode)new JsonObject
+            {
+                ["editorAlias"] = "Umbraco.TextBox",
+                ["alias"] = value.Alias,
+                ["culture"] = value.Culture,
+                ["segment"] = null,
+                ["value"] = value.Value,
+            })]),
+            ["variants"] = new JsonArray([.. variants.Select(variant => (JsonNode)new JsonObject
+            {
+                ["culture"] = variant.Culture,
+                ["segment"] = null,
+                ["name"] = variant.Name,
+                ["state"] = variant.State,
+            })]),
+        }.ToJsonString();
+
+    private static Dictionary<string, string?> Values(JsonObject body)
+        => body["values"]!.AsArray().ToDictionary(
+            value => $"{value!["alias"]!.GetValue<string>()}/{value["culture"]?.GetValue<string>()}",
+            value => value!["value"]?.GetValue<string>());
+
+    [Fact]
+    public void ForFields_TakesOnlyTheChosenValueFromHere_AndKeepsEverythingElseOfTheTarget()
+    {
+        var source = Document(Template, [("title", null, "Ours"), ("intro", null, "Our intro")], (null, "Our name", "Published"));
+        var target = Document(TheirTemplate, [("title", null, "Theirs"), ("intro", null, "Their intro"), ("extra", null, "Only there")], (null, "Their name", "Published"));
+
+        var write = TransferRequests.ForFields(FieldRow(PlanOutcome.Update, [ValueOf("title")]), source, target);
+
+        Assert.Equal(("PUT", $"{Api}/document/{Key:D}"), (write.Method, write.Path));
+        var body = Body(write);
+        Assert.Equal(new Dictionary<string, string?> { ["title/"] = "Ours", ["intro/"] = "Their intro", ["extra/"] = "Only there" }, Values(body));
+        Assert.Equal(["Their name"], body["variants"]!.AsArray().Select(variant => variant!["name"]!.GetValue<string>()));
+        Assert.Equal(TheirTemplate.ToString(), body["template"]!["id"]!.GetValue<string>());
+        Assert.False(body.ContainsKey("culturesToPublish"));
+    }
+
+    [Fact]
+    public void ForFields_ClearsAChosenValueThatIsEmptyHere()
+    {
+        var source = Document(Template, [("title", null, "Ours")], (null, "Page", "Published"));
+        var target = Document(TheirTemplate, [("title", null, "Theirs"), ("intro", null, "Their intro")], (null, "Page", "Published"));
+
+        var write = TransferRequests.ForFields(FieldRow(PlanOutcome.Update, [ValueOf("intro")]), source, target);
+
+        Assert.Equal(new Dictionary<string, string?> { ["title/"] = "Theirs" }, Values(Body(write)));
+    }
+
+    [Fact]
+    public void ForFields_TakesAChosenNameInItsOwnCultureOnly_AndPublishesThePlannedCultures()
+    {
+        var source = Document(Template, [("title", "en-US", "en")], ("en-US", "New en", "Published"), ("nl-BE", "New nl", "Published"));
+        var target = Document(TheirTemplate, [("title", "en-US", "en")], ("en-US", "Old en", "Published"), ("nl-BE", "Old nl", "Published"));
+
+        var write = TransferRequests.ForFields(FieldRow(PlanOutcome.Update, [new FieldChoice(FieldKind.Name, null, "EN-us", null)], "en-US"), source, target);
+
+        Assert.Equal(("PUT", $"{Api}/document/{Key:D}/update-and-publish"), (write.Method, write.Path));
+        var body = Body(write);
+        Assert.Equal(["New en", "Old nl"], body["variants"]!.AsArray().Select(variant => variant!["name"]!.GetValue<string>()));
+        Assert.Equal(["en-US"], body["culturesToPublish"]!.AsArray().Select(culture => culture!.GetValue<string>()));
+    }
+
+    [Fact]
+    public void ForFields_CreatesACultureTheTargetLacks_OnlyForAChosenField()
+    {
+        var source = Document(Template, [("title", "en-US", "en"), ("title", "de-DE", "de"), ("title", "nl-BE", "nl")],
+            ("en-US", "Page en", "Published"), ("de-DE", "Page de", "Draft"), ("nl-BE", "Page nl", "Draft"));
+        var target = Document(TheirTemplate, [("title", "en-US", "en")], ("en-US", "Page en", "Published"), ("de-DE", "Seite", "NotCreated"));
+
+        var write = TransferRequests.ForFields(FieldRow(PlanOutcome.Update, [ValueOf("title", "de-DE")]), source, target);
+
+        var body = Body(write);
+        Assert.Equal(["en-US", "de-DE"], body["variants"]!.AsArray().Select(variant => variant!["culture"]!.GetValue<string>()));
+        Assert.Equal("Page de", body["variants"]![1]!["name"]!.GetValue<string>());
+        Assert.Equal(new Dictionary<string, string?> { ["title/en-US"] = "en", ["title/de-DE"] = "de" }, Values(body));
+    }
+
+    [Fact]
+    public void ForAndForFields_NeverWriteAFieldRowAsAWholeNode_NorTheOtherWayRound()
+    {
+        var json = Document(Template, [("title", null, "x")], (null, "Page", "Published"));
+
+        Assert.Throws<ArgumentException>(() => TransferRequests.For(FieldRow(PlanOutcome.Update, [ValueOf("title")]), json));
+        Assert.Throws<ArgumentException>(() => TransferRequests.ForFields(Row(PlanOutcome.Update), json, json));
+        Assert.Throws<ArgumentException>(() => TransferRequests.ForFields(FieldRow(PlanOutcome.Create, [ValueOf("title")]), json, json));
+        Assert.Throws<ArgumentException>(() => TransferRequests.ForFields(FieldRow(PlanOutcome.Unchanged, [ValueOf("title")]), json, json));
+    }
 }
