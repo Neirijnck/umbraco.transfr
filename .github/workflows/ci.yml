@@ -15,21 +15,23 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Runners are named, not ubuntu-latest: that label moves to a new image over weeks, so runs would switch images
+# without a change here. Move the label on deliberately.
 jobs:
   build:
     name: Client checks, build and tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # A major version rather than global.json: global.json carries comments, and its own roll-forward rule still
       # decides which installed band builds.
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: src/Neirijnck.Transfr/Client/.nvmrc
           cache: npm
@@ -70,7 +72,7 @@ jobs:
     # Only for a version tag (vX.Y.Z, pushed or made with a GitHub release), after every gate is green.
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     permissions:
       # The GitHub release.
@@ -79,7 +81,7 @@ jobs:
       # long-lived key is stored anywhere. The nuget.org policy names this repository and this file (ci.yml).
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # A version can never be replaced on nuget.org, so a wrong number must stop here: the tag is the version, and
       # the version's major is the Umbraco major of the tagged commit (v17.x.y comes from feature/17, for Umbraco 17).
@@ -109,11 +111,11 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: src/Neirijnck.Transfr/Client/.nvmrc
           cache: npm
