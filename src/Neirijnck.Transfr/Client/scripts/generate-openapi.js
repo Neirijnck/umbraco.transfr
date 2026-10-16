@@ -12,7 +12,7 @@ if (swaggerUrl === undefined) {
     `Please provide the URL to the OpenAPI spec as the first argument found in ${chalk.yellow('package.json')}`,
   );
   console.error(
-    `Example: node generate-openapi.js ${chalk.yellow('https://localhost:5000/umbraco/swagger/REPLACE_ME/swagger.json')}`,
+    `Example: node generate-openapi.js ${chalk.yellow('https://localhost:5000/umbraco/openapi/REPLACE_ME.json')}`,
   );
   process.exit();
 }

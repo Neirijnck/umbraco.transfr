@@ -13,7 +13,17 @@ import {
   whyNotSelectable,
 } from './selection.js';
 
-const row = (status: string): TreeRowResponseModel => ({ key: 'r', status, orderDiffers: false });
+const row = (status: string): TreeRowResponseModel => ({
+  key: 'r',
+  status,
+  local: null,
+  remote: null,
+  otherParentKey: null,
+  sameNameKey: null,
+  content: null,
+  orderDiffers: false,
+  schemaProblems: null,
+});
 
 describe('selection', () => {
   it('picks a node on its own and drops it again', () => {

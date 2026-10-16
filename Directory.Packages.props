@@ -13,20 +13,20 @@
   </PropertyGroup>
 
   <!--
-    Package dependencies. Built and verified against 17.7.0, the minimum of the range; any 17.x from
-    there on is supported. Umbraco 18 is out of scope.
+    Package dependencies. Built and verified against 18.2.1, the minimum of the range; any 18.x from
+    there on is supported. Umbraco 17 is the 17.x line on feature/17.
   -->
   <ItemGroup>
-    <PackageVersion Include="Umbraco.Cms.Api.Common" Version="[17.7.0,18.0.0)" />
-    <PackageVersion Include="Umbraco.Cms.Api.Management" Version="[17.7.0,18.0.0)" />
-    <PackageVersion Include="Umbraco.Cms.Web.Common" Version="[17.7.0,18.0.0)" />
-    <PackageVersion Include="Umbraco.Cms.Web.Website" Version="[17.7.0,18.0.0)" />
+    <PackageVersion Include="Umbraco.Cms.Api.Common" Version="[18.2.1,19.0.0)" />
+    <PackageVersion Include="Umbraco.Cms.Api.Management" Version="[18.2.1,19.0.0)" />
+    <PackageVersion Include="Umbraco.Cms.Web.Common" Version="[18.2.1,19.0.0)" />
+    <PackageVersion Include="Umbraco.Cms.Web.Website" Version="[18.2.1,19.0.0)" />
   </ItemGroup>
 
   <!-- Test site: exactly the version the package is verified against. -->
   <ItemGroup>
-    <PackageVersion Include="Umbraco.Cms" Version="17.7.0" />
-    <PackageVersion Include="Umbraco.Cms.DevelopmentMode.Backoffice" Version="17.7.0" />
+    <PackageVersion Include="Umbraco.Cms" Version="18.2.1" />
+    <PackageVersion Include="Umbraco.Cms.DevelopmentMode.Backoffice" Version="18.2.1" />
     <!-- Must match UmbracoAppLocalIcuVersion in the test site's .csproj. -->
     <PackageVersion Include="Microsoft.ICU.ICU4C.Runtime" Version="72.1.0.3" />
   </ItemGroup>
@@ -49,8 +49,8 @@
     that drags it in; removed once upstream ships the fix.
     Not pinned: SixLabors.ImageSharp 3.1.12 (via Umbraco.Cms, test site only; the package does not depend
     on it) has GHSA-gwg2-r3hj-4w44, -wmxv-xphr-5c9g, -j3p4-wp97-rph4, -j9gm-c75j-xc9q, -jjfr-hcj7-qf5w.
-    The first patched version is 4.1.2, a major Umbraco 17 does not support, so they stay visible as
-    audit warnings until Umbraco ships a fix.
+    The first patched version is 4.1.2, a major Umbraco does not support (18.2.1 still asks for 3.1.12), so
+    they stay visible as audit warnings until Umbraco ships a fix.
   -->
   <ItemGroup>
     <!--

@@ -12,18 +12,28 @@ import {
 const row = (outcome: string, publishCultures: Array<string | null> = [], kind = 'Document'): PlanRowResponseModel => ({
   kind,
   key: 'k',
+  parentKey: null,
   name: 'About',
+  documentTypeName: null,
   outcome,
   notes: [],
   // The API sends null for invariant content although the generated type says string.
   publishCultures: publishCultures as Array<string>,
   differences: [],
   schemaProblems: [],
+  fingerprint: null,
+  changedOnRemote: null,
+  lastCopied: null,
 });
 
 const note = (kind: string, extra: Partial<PlanNoteResponseModel> = {}): PlanNoteResponseModel => ({
   kind,
   blocks: false,
+  key: null,
+  name: null,
+  propertyAlias: null,
+  propertyName: null,
+  culture: null,
   canAddToSelection: false,
   ...extra,
 });
@@ -54,7 +64,7 @@ describe('describeRemoteChange', () => {
   });
 
   it('leaves out a user it has no name for, and shows an unknown change as named', () => {
-    expect(describeRemoteChange({ at, what: 'Copy' }, 'Test site B', 'UTC')).toBe(
+    expect(describeRemoteChange({ by: null, at, what: 'Copy' }, 'Test site B', 'UTC')).toBe(
       'Last Copy on Test site B, 15 Oct 2026, 10:25',
     );
   });

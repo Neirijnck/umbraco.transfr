@@ -1,14 +1,11 @@
-﻿using Asp.Versioning;
-using Microsoft.AspNetCore.Mvc.ApiExplorer;
-using Microsoft.AspNetCore.Mvc.Controllers;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
+﻿using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
-using Swashbuckle.AspNetCore.SwaggerGen;
 using Umbraco.Cms.Api.Common.OpenApi;
 using Umbraco.Cms.Api.Management.OpenApi;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
+using UmbracoConstants = Umbraco.Cms.Core.Constants;
 
 namespace Neirijnck.Transfr.Composers;
 
@@ -18,34 +15,31 @@ namespace Neirijnck.Transfr.Composers;
 public class TransfrApiComposer : IComposer
 {
     public void Compose(IUmbracoBuilder builder)
-    {
-        builder.Services.AddSingleton<IOperationIdHandler, TransfrOperationIdHandler>();
-
-        builder.Services.Configure<SwaggerGenOptions>(options =>
-        {
-            options.SwaggerDoc(Constants.ApiName, new OpenApiInfo { Title = "Transfr Backoffice API", Version = "1.0" });
-            options.OperationFilter<TransfrOperationSecurityFilter>();
-        });
-    }
-
-    public class TransfrOperationSecurityFilter : BackOfficeSecurityRequirementsOperationFilterBase
-    {
-        protected override string ApiName => Constants.ApiName;
-    }
+        => builder.AddBackOfficeOpenApiDocument(Constants.ApiName, document => document
+            .WithTitle("Transfr Backoffice API")
+            .WithBackOfficeAuthentication()
+            // The controllers answer with the backoffice JSON options, so the schema must describe those.
+            .WithJsonOptions(UmbracoConstants.JsonOptionsNames.BackOffice)
+            // Runs after Umbraco's own operation id transformer, which the document adds first.
+            .ConfigureOpenApiOptions(options => options.AddOperationTransformer<TransfrOperationIdTransformer>()));
 
     /// <summary>
     /// Operation ids = action names, so the generated client gets short method names.
     /// </summary>
-    public class TransfrOperationIdHandler : OperationIdHandler
+    public sealed class TransfrOperationIdTransformer : IOpenApiOperationTransformer
     {
-        public TransfrOperationIdHandler(IOptions<ApiVersioningOptions> apiVersioningOptions)
-            : base(apiVersioningOptions)
+        public Task TransformAsync(OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken cancellationToken)
         {
+            ArgumentNullException.ThrowIfNull(operation);
+            ArgumentNullException.ThrowIfNull(context);
+
+            if (context.Description.ActionDescriptor is ControllerActionDescriptor action
+                && action.ControllerTypeInfo.Namespace?.StartsWith("Neirijnck.Transfr.Controllers", StringComparison.Ordinal) is true)
+            {
+                operation.OperationId = action.ActionName;
+            }
+
+            return Task.CompletedTask;
         }
-
-        protected override bool CanHandle(ApiDescription apiDescription, ControllerActionDescriptor controllerActionDescriptor)
-            => controllerActionDescriptor.ControllerTypeInfo.Namespace?.StartsWith("Neirijnck.Transfr.Controllers", StringComparison.Ordinal) is true;
-
-        public override string Handle(ApiDescription apiDescription) => $"{apiDescription.ActionDescriptor.RouteValues["action"]}";
     }
 }

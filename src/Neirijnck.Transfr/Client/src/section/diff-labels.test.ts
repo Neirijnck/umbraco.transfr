@@ -19,6 +19,8 @@ const field = (
 const block = (status: string, localIndex: number | null, remoteIndex: number | null): BlockDiffResponseModel => ({
   key: 'k',
   status,
+  contentTypeKey: null,
+  contentTypeName: null,
   localIndex,
   remoteIndex,
   values: [],

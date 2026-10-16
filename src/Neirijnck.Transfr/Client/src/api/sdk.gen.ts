@@ -27,14 +27,14 @@ export class TransfrService {
         });
     }
     
-    public static connect<ThrowOnError extends boolean = false>(options?: Options<ConnectData, ThrowOnError>): RequestResult<ConnectResponses, ConnectErrors, ThrowOnError> {
-        return (options?.client ?? client).post<ConnectResponses, ConnectErrors, ThrowOnError>({
+    public static connect<ThrowOnError extends boolean = false>(options: Options<ConnectData, ThrowOnError>): RequestResult<ConnectResponses, ConnectErrors, ThrowOnError> {
+        return (options.client ?? client).post<ConnectResponses, ConnectErrors, ThrowOnError>({
             security: [{ scheme: 'bearer', type: 'http' }],
             url: '/umbraco/management/api/v1/transfr/remotes',
             ...options,
             headers: {
                 'Content-Type': 'application/json',
-                ...options?.headers
+                ...options.headers
             }
         });
     }

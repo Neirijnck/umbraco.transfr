@@ -18,6 +18,11 @@ const row = (
 ): TreeRowResponseModel => ({
   key: 'r',
   status,
+  local: null,
+  remote: null,
+  otherParentKey: null,
+  sameNameKey: null,
+  content: null,
   orderDiffers: false,
   schemaProblems,
 });

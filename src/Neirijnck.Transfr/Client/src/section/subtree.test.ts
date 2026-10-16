@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SubtreeLevelResponseModel, TreeRowResponseModel } from '../api/index.js';
 import { countSubtree, describeCounts, formatDuration, hasDifference, positionsToReveal } from './subtree.js';
 
-const side = { name: 'n', hasChildren: false };
+const side = { name: 'n', hasChildren: false, documentTypeIcon: null, documentTypeName: null };
 
 function row(key: string, status = 'InBoth', extra: Partial<TreeRowResponseModel> = {}): TreeRowResponseModel {
   return {
@@ -10,13 +10,22 @@ function row(key: string, status = 'InBoth', extra: Partial<TreeRowResponseModel
     status,
     local: status === 'OnlyRemote' || status === 'ElsewhereLocally' ? null : side,
     remote: status === 'OnlyLocal' || status === 'ElsewhereOnRemote' ? null : side,
+    otherParentKey: null,
+    sameNameKey: null,
     orderDiffers: false,
     content: status === 'InBoth' ? { status: 'Identical', differences: [], error: null } : null,
+    schemaProblems: null,
     ...extra,
   };
 }
 
-const changed = { content: { status: 'Different', differences: [{ kind: 'Value', alias: 'title' }], error: null } };
+const changed = {
+  content: {
+    status: 'Different',
+    differences: [{ kind: 'Value', alias: 'title', culture: null, segment: null }],
+    error: null,
+  },
+};
 
 // root > home > (about, news > (article*, moved*), moved*), with * = a difference.
 const levels: Array<SubtreeLevelResponseModel> = [
@@ -36,7 +45,11 @@ describe('hasDifference', () => {
     expect(hasDifference(row('a'))).toBe(false);
     expect(hasDifference(row('a', 'InBoth', changed))).toBe(true);
     expect(hasDifference(row('a', 'InBoth', { orderDiffers: true }))).toBe(true);
-    expect(hasDifference(row('a', 'InBoth', { content: { status: 'Failed', differences: [] } }))).toBe(true);
+    expect(
+      hasDifference(
+        row('a', 'InBoth', { content: { status: 'Failed', differences: [], error: 'Reading the remote failed' } }),
+      ),
+    ).toBe(true);
     expect(hasDifference(row('a', 'OnlyLocal'))).toBe(true);
     expect(hasDifference(row('a', 'OnlyLocal', { sameNameKey: 'b' }))).toBe(true);
   });

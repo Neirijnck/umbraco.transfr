@@ -23,7 +23,11 @@
     <ProjectReference Include="..\..\src\Neirijnck.Transfr.Core\Neirijnck.Transfr.Core.csproj" />
   </ItemGroup>
 
-  <!-- Responses captured from an Umbraco 17.7.0 test site, read by the parser tests. -->
+  <!--
+    Responses captured from an Umbraco 17.7.0 test site, read by the parser tests. Kept for 18: the same endpoints on
+    18.2.1 answer in the same shape, except that block layouts no longer carry contentUdi/settingsUdi (always null in
+    17) and document types gained allowedInLibrary; nothing reads either.
+  -->
   <ItemGroup>
     <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

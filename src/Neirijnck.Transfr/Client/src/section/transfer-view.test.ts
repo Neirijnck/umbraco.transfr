@@ -5,13 +5,17 @@ import { countWrites, describeDrift, describeTransfer, resultLook, toDryRun, wro
 const row = (key: string, outcome: string, kind = 'Document'): PlanRowResponseModel => ({
   kind,
   key,
+  parentKey: null,
   name: key,
+  documentTypeName: null,
   outcome,
   notes: [],
   publishCultures: [],
   differences: [],
   schemaProblems: [],
   fingerprint: kind === 'Document' ? `${key}|absent` : null,
+  changedOnRemote: null,
+  lastCopied: null,
 });
 
 const result = (key: string, outcome: string): TransferRowResponseModel => ({
@@ -21,6 +25,8 @@ const result = (key: string, outcome: string): TransferRowResponseModel => ({
   outcome: 'Create',
   result: outcome,
   publishCultures: [],
+  error: null,
+  targetState: null,
 });
 
 const response = (status: string, rows: Array<TransferRowResponseModel>, sortedParents = 0): TransferResponseModel => ({
@@ -28,6 +34,7 @@ const response = (status: string, rows: Array<TransferRowResponseModel>, sortedP
   rows,
   drift: [],
   sortedParents,
+  error: null,
   remoteRequests: 1,
 });
 
