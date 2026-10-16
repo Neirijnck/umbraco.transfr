@@ -220,7 +220,8 @@ public sealed partial class TransferService
     }
 
     // Puts the copied nodes in their place under every parent where the dry run said one moves, from the remote's
-    // order as it is now (new nodes included), and only when that order changes.
+    // order as it is now, and only when that order changes. The nodes just created are placed as in the dry run, not from
+    // where the remote put them (last).
     private async Task<(int Parents, int Requests)> SortAsync(RemoteDefinition remote, IReadOnlyList<TransferRow> rows, CancellationToken cancellationToken)
     {
         var culture = await this.languageService.GetDefaultIsoCodeAsync();
@@ -229,6 +230,10 @@ public sealed partial class TransferService
             .Where(row => row.Row.Notes.All(note => note.Kind != PlanNoteKind.UnderAnotherParentOnTarget))
             .Select(row => row.Row)
             .ToList();
+        var created = rows
+            .Where(row => row.Result == TransferRowResult.Written && row.Row.Outcome == PlanOutcome.Create)
+            .Select(row => row.Row.Key)
+            .ToHashSet();
         var parents = copied.Where(row => row.Notes.Any(note => note.Kind == PlanNoteKind.PlacedAfter)).Select(row => row.ParentKey).Distinct();
 
         var sorted = 0;
@@ -239,7 +244,7 @@ public sealed partial class TransferService
             requests += readRequests;
             var targetOrder = children.Select(child => child.Key).ToList();
             var localOrder = this.localTree.ReadLevel(parentKey, culture).Select(child => child.Key).ToList();
-            var newOrder = SiblingOrder.Place(targetOrder, localOrder, copied.Where(row => row.ParentKey == parentKey).Select(row => row.Key).ToHashSet());
+            var newOrder = SiblingOrder.PlaceAfterWrite(targetOrder, localOrder, copied.Where(row => row.ParentKey == parentKey).Select(row => row.Key).ToHashSet(), created);
             if (newOrder.SequenceEqual(targetOrder))
             {
                 continue;

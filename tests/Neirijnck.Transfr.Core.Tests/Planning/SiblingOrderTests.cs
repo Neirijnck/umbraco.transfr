@@ -12,6 +12,35 @@ public sealed class SiblingOrderTests
     private static readonly Guid M = new("ffffffff-0000-4000-8000-000000000006");
     private static readonly Guid X = new("99999999-0000-4000-8000-000000000007");
 
+    // Measured on test site B: after creating Team (N), the target listed it last, behind Careers (X), a node only
+    // there. Placing from that order kept it last; the dry run had placed it right after Variant Page (D).
+    [Fact]
+    public void PlaceAfterWrite_PutsACreatedNodeWhereTheDryRunPlacedIt_NotBehindNodesOnlyOnTheTarget()
+    {
+        var targetNow = new[] { A, B, C, D, X, N };
+        var here = new[] { A, B, C, D, M, N };
+        var copied = new HashSet<Guid> { N };
+
+        Assert.Equal([A, B, C, D, N, X], SiblingOrder.PlaceAfterWrite(targetNow, here, copied, new HashSet<Guid> { N }));
+        Assert.Equal(SiblingOrder.Place([A, B, C, D, X], here, copied), SiblingOrder.PlaceAfterWrite(targetNow, here, copied, new HashSet<Guid> { N }));
+
+        // From the order as it is now, the created node looks in order and stays last: the bug.
+        Assert.Equal(targetNow, SiblingOrder.Place(targetNow, here, copied));
+    }
+
+    [Fact]
+    public void PlaceAfterWrite_LeavesACreatedNodeThatIsAlreadyInPlace()
+    {
+        Assert.Equal([A, B, N], SiblingOrder.PlaceAfterWrite([A, B, N], [A, B, N], new HashSet<Guid> { N }, new HashSet<Guid> { N }));
+    }
+
+    [Fact]
+    public void PlaceAfterWrite_MovesNothingThatWasNotCreated()
+    {
+        // An updated node in order stays where it is, as with Place.
+        Assert.Equal([A, X, B], SiblingOrder.PlaceAfterWrite([A, X, B], [A, B], new HashSet<Guid> { B }, new HashSet<Guid>()));
+    }
+
     [Fact]
     public void Place_PutsANewNodeRightAfterItsPredecessorHere()
     {

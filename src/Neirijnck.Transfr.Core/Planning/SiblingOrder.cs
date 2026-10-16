@@ -55,6 +55,26 @@ public static class SiblingOrder
         return result;
     }
 
+    /// <summary>
+    /// The order to give the target's children once a transfer has written: <see cref="Place"/> from the target's order
+    /// without the nodes the transfer just created, as the dry run placed them. The target puts a created node last, so
+    /// behind nodes that exist only there it would otherwise count as in order and stay last.
+    /// </summary>
+    /// <param name="targetOrderNow">The parent's children on the target now, the created nodes included.</param>
+    /// <param name="localOrder">The same parent's children here, in order.</param>
+    /// <param name="copied">The copied nodes under that parent, the created ones included.</param>
+    /// <param name="created">The nodes the transfer created under that parent.</param>
+    public static IReadOnlyList<Guid> PlaceAfterWrite(
+        IReadOnlyList<Guid> targetOrderNow,
+        IReadOnlyList<Guid> localOrder,
+        IReadOnlySet<Guid> copied,
+        IReadOnlySet<Guid> created)
+    {
+        ArgumentNullException.ThrowIfNull(targetOrderNow);
+        ArgumentNullException.ThrowIfNull(created);
+        return Place(targetOrderNow.Where(key => !created.Contains(key)).ToList(), localOrder, copied);
+    }
+
     // The indexes of the increasing run (by target position) that keeps the most fixed nodes, then the most others:
     // O(n²) over one parent's children, which a plan bounds.
     private static HashSet<int> HeaviestRun(List<int> positions, List<bool> isFixed)
