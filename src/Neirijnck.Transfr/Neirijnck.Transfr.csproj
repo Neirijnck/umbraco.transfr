@@ -63,7 +63,11 @@
     <ClientDir>$(MSBuildProjectDirectory)\Client</ClientDir>
   </PropertyGroup>
 
-  <Target Name="RestoreClientPackages" BeforeTargets="BuildClient" Condition="'$(SkipClientBuild)' != 'true' And !Exists('$(ClientDir)\node_modules')">
+  <!-- npm writes node_modules\.package-lock.json on every install: a package-lock.json newer than that (a branch
+       switch to another Umbraco line, a pull) means node_modules no longer matches it, so install again. Checking only
+       that node_modules exists built one line against the other line's backoffice. -->
+  <Target Name="RestoreClientPackages" BeforeTargets="BuildClient" Condition="'$(SkipClientBuild)' != 'true'"
+          Inputs="$(ClientDir)\package-lock.json" Outputs="$(ClientDir)\node_modules\.package-lock.json">
     <Exec WorkingDirectory="$(ClientDir)" Command="npm ci" />
   </Target>
 
