@@ -12,6 +12,7 @@ const row = (key: string, outcome: string, kind = 'Document'): PlanRowResponseMo
   differences: [],
   schemaProblems: [],
   fingerprint: kind === 'Document' ? `${key}|absent` : null,
+  fields: null,
 });
 
 const result = (key: string, outcome: string): TransferRowResponseModel => ({

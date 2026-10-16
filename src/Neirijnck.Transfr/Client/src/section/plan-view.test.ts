@@ -19,6 +19,7 @@ const row = (outcome: string, publishCultures: Array<string | null> = [], kind =
   publishCultures: publishCultures as Array<string>,
   differences: [],
   schemaProblems: [],
+  fields: null,
 });
 
 const note = (kind: string, extra: Partial<PlanNoteResponseModel> = {}): PlanNoteResponseModel => ({

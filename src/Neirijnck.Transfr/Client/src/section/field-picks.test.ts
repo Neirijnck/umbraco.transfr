@@ -10,22 +10,34 @@ import {
   samePicks,
   togglePick,
 } from './field-picks.js';
+import type { FieldPick } from './field-picks.js';
 
-const title = { kind: 'Value', alias: 'title', culture: null, segment: null };
-const nameEn = { kind: 'Name', culture: 'en-US', segment: null };
+// Every property set, as the API types of both lines require (Umbraco 18 makes nullable fields required).
+const field = (kind: string, alias: string | null = null, culture: string | null = null): FieldPick => ({
+  kind,
+  alias,
+  culture,
+  segment: null,
+});
+const title = field('Value', 'title');
+const nameEn = field('Name', null, 'en-US');
 
 describe('field picks', () => {
   it('picks a field and drops it again, matching cultures without case', () => {
     const picked = togglePick([], nameEn);
     expect(picked).toEqual([nameEn]);
-    expect(hasPick(picked, { kind: 'Name', culture: 'EN-us' })).toBe(true);
-    expect(togglePick(picked, { kind: 'Name', culture: 'en-us', segment: null })).toEqual([]);
+    expect(hasPick(picked, field('Name', null, 'EN-us'))).toBe(true);
+    expect(togglePick(picked, field('Name', null, 'en-us'))).toEqual([]);
+  });
+
+  it('treats a property left out like null', () => {
+    expect(hasPick([nameEn], { kind: 'Name', culture: 'en-US' } as FieldPick)).toBe(true);
   });
 
   it('tells fields apart by kind, alias and culture', () => {
-    expect(hasPick([title], { kind: 'Value', alias: 'title', culture: 'en-US' })).toBe(false);
-    expect(hasPick([title], { kind: 'Value', alias: 'body' })).toBe(false);
-    expect(hasPick([nameEn], { kind: 'Value', alias: null, culture: 'en-US' })).toBe(false);
+    expect(hasPick([title], field('Value', 'title', 'en-US'))).toBe(false);
+    expect(hasPick([title], field('Value', 'body'))).toBe(false);
+    expect(hasPick([nameEn], field('Value', null, 'en-US'))).toBe(false);
   });
 
   it('compares lists of fields in any order', () => {
@@ -35,11 +47,18 @@ describe('field picks', () => {
   });
 
   it('offers only a name from the node box, and a property as its whole value', () => {
-    const field = (kind: string): FieldDiffResponseModel => ({ kind, culture: 'nl-BE', segment: null, differs: true });
-    expect(nameField(field('Name'))).toEqual({ kind: 'Name', culture: 'nl-BE', segment: null });
-    expect(nameField(field('State'))).toBeUndefined();
-    expect(nameField(field('DocumentType'))).toBeUndefined();
-    expect(nameField(field('Template'))).toBeUndefined();
+    const row = (kind: string): FieldDiffResponseModel => ({
+      kind,
+      culture: 'nl-BE',
+      segment: null,
+      local: 'a',
+      remote: 'b',
+      differs: true,
+    });
+    expect(nameField(row('Name'))).toEqual({ kind: 'Name', alias: null, culture: 'nl-BE', segment: null });
+    expect(nameField(row('State'))).toBeUndefined();
+    expect(nameField(row('DocumentType'))).toBeUndefined();
+    expect(nameField(row('Template'))).toBeUndefined();
 
     const property: PropertyDiffResponseModel = {
       alias: 'blocks',
@@ -52,9 +71,9 @@ describe('field picks', () => {
   it('names the fields a row carries over', () => {
     expect(
       describeFields([
-        { kind: 'Value', alias: 'title', label: 'Title' },
-        { kind: 'Value', alias: 'teaser', label: null },
-        { kind: 'Name', culture: 'en-US' },
+        { kind: 'Value', alias: 'title', label: 'Title', culture: null, segment: null },
+        { kind: 'Value', alias: 'teaser', label: null, culture: null, segment: null },
+        { kind: 'Name', alias: null, label: null, culture: 'en-US', segment: null },
       ]),
     ).toBe('Title, teaser, Name (en-US)');
   });

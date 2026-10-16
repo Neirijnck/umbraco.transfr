@@ -37,7 +37,7 @@ export function samePicks(left: ReadonlyArray<FieldPick>, right: ReadonlyArray<F
 /** The field behind a row of the diff's node box: only a name can be picked (not the type, template or state). */
 export function nameField(field: FieldDiffResponseModel): FieldPick | undefined {
   return field.kind === 'Name'
-    ? { kind: 'Name', culture: field.culture ?? null, segment: field.segment ?? null }
+    ? { kind: 'Name', alias: null, culture: field.culture ?? null, segment: field.segment ?? null }
     : undefined;
 }
 
@@ -46,8 +46,13 @@ export function propertyField(property: PropertyDiffResponseModel): FieldPick {
   return { kind: 'Value', alias: property.alias, culture: property.culture ?? null, segment: property.segment ?? null };
 }
 
-/** E.g. "Title, Name (en-US)": the fields a row carries over, by label. */
-export function describeFields(fields: ReadonlyArray<FieldChoiceResponseModel>): string {
+/**
+ * E.g. "Title, Name (en-US)": the fields a row carries over, by label. Takes picked fields too (no label: the alias),
+ * hence the loose type.
+ */
+export function describeFields(
+  fields: ReadonlyArray<Pick<FieldChoiceResponseModel, 'kind'> & Partial<Omit<FieldChoiceResponseModel, 'kind'>>>,
+): string {
   return fields
     .map((field) => {
       const what = field.kind === 'Name' ? 'Name' : (field.label ?? field.alias ?? field.kind);
