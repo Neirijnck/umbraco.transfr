@@ -106,7 +106,12 @@ public partial class CompareController : TransfrApiControllerBase
             return this.Problem(title: "Select at least one document", statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var selection = request.Selection.Select(choice => new PlanSelection(choice.Key, choice.IncludeDescendants)).ToList();
+        var (selection, invalid) = ReadSelection(request.Selection);
+        if (invalid is not null)
+        {
+            return this.Problem(title: "The selection names a field that can't be read", detail: invalid, statusCode: StatusCodes.Status400BadRequest);
+        }
+
         return await this.CompareWithAsync(alias, null, async remote =>
         {
             try
@@ -151,7 +156,12 @@ public partial class CompareController : TransfrApiControllerBase
             dryRun.Add(new DryRunRow(row.Key, outcome, row.Fingerprint));
         }
 
-        var selection = request.Selection.Select(choice => new PlanSelection(choice.Key, choice.IncludeDescendants)).ToList();
+        var (selection, invalid) = ReadSelection(request.Selection);
+        if (invalid is not null)
+        {
+            return this.Problem(title: "The selection names a field that can't be read", detail: invalid, statusCode: StatusCodes.Status400BadRequest);
+        }
+
         var overwrite = (request.Overwrite ?? []).ToHashSet();
         var userKey = CurrentUserKey(this.backOfficeSecurityAccessor);
         return await this.CompareWithAsync(alias, null, async remote =>
@@ -170,6 +180,42 @@ public partial class CompareController : TransfrApiControllerBase
     }
 
     // Finds the user's remote (404 when unknown) and turns a refused sign-in or a failed remote read into a 502.
+    // The selection as the planner takes it, or why it can't: a field-level pick is one node (no descendants) with at
+    // least one readable field.
+    private static (List<PlanSelection> Selection, string? Error) ReadSelection(IReadOnlyList<PlanSelectionRequestModel> request)
+    {
+        var selection = new List<PlanSelection>();
+        foreach (var choice in request)
+        {
+            if (choice.Fields is null)
+            {
+                selection.Add(new PlanSelection(choice.Key, choice.IncludeDescendants));
+                continue;
+            }
+
+            if (choice.IncludeDescendants || choice.Fields.Count == 0)
+            {
+                return ([], $"{choice.Key}: fields are picked for one node, without what is below it, and at least one.");
+            }
+
+            var fields = new List<FieldChoice>();
+            foreach (var field in choice.Fields)
+            {
+                var (read, error) = FieldChoice.Read(field.Kind, field.Alias, field.Culture, field.Segment);
+                if (read is null)
+                {
+                    return ([], $"{choice.Key}: {error}");
+                }
+
+                fields.Add(read);
+            }
+
+            selection.Add(new PlanSelection(choice.Key, false, fields));
+        }
+
+        return (selection, null);
+    }
+
     private async Task<IActionResult> CompareWithAsync(string alias, Guid? parentKey, Func<RemoteDefinition, Task<IActionResult>> compare)
     {
         var remote = this.registry.FindValid(CurrentUserKey(this.backOfficeSecurityAccessor), alias);

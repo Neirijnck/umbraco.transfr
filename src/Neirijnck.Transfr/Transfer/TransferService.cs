@@ -141,7 +141,7 @@ public sealed partial class TransferService
             }
             else
             {
-                var (error, extraRequests) = await this.WriteAsync(remote, row, plan.SourceJson[row.Key], cancellationToken);
+                var (error, extraRequests) = await this.WriteAsync(remote, row, plan.SourceJson[row.Key], plan.TargetJson.GetValueOrDefault(row.Key), cancellationToken);
                 requests += extraRequests;
                 failed = error is not null;
                 rows.Add(new TransferRow(row, failed ? TransferRowResult.Failed : TransferRowResult.Written, error, null));
@@ -196,9 +196,17 @@ public sealed partial class TransferService
     }
 
     // One create or update. Returns why it failed (null when it worked) and the requests it cost.
-    private async Task<(string? Error, int Requests)> WriteAsync(RemoteDefinition remote, PlanRow row, string sourceJson, CancellationToken cancellationToken)
+    private async Task<(string? Error, int Requests)> WriteAsync(
+        RemoteDefinition remote,
+        PlanRow row,
+        string sourceJson,
+        string? targetJson,
+        CancellationToken cancellationToken)
     {
-        var write = TransferRequests.For(row, sourceJson);
+        // A field-level row builds on the target's document as this transfer's own plan just read it.
+        var write = row.Fields is null
+            ? TransferRequests.For(row, sourceJson)
+            : TransferRequests.ForFields(row, sourceJson, targetJson ?? throw new InvalidOperationException($"No remote document for the field-level row {row.Key}."));
         try
         {
             using var content = new StringContent(write.Body, Encoding.UTF8, "application/json");
