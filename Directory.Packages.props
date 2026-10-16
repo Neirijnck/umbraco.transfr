@@ -13,20 +13,20 @@
   </PropertyGroup>
 
   <!--
-    Package dependencies. Built and verified against 18.2.1, the minimum of the range; any 18.x from
+    Package dependencies. Built and verified against 18.1.0, the minimum of the range; any 18.x from
     there on is supported. Umbraco 17 is the 17.x line on feature/17.
   -->
   <ItemGroup>
-    <PackageVersion Include="Umbraco.Cms.Api.Common" Version="[18.2.1,19.0.0)" />
-    <PackageVersion Include="Umbraco.Cms.Api.Management" Version="[18.2.1,19.0.0)" />
-    <PackageVersion Include="Umbraco.Cms.Web.Common" Version="[18.2.1,19.0.0)" />
-    <PackageVersion Include="Umbraco.Cms.Web.Website" Version="[18.2.1,19.0.0)" />
+    <PackageVersion Include="Umbraco.Cms.Api.Common" Version="[18.1.0,19.0.0)" />
+    <PackageVersion Include="Umbraco.Cms.Api.Management" Version="[18.1.0,19.0.0)" />
+    <PackageVersion Include="Umbraco.Cms.Web.Common" Version="[18.1.0,19.0.0)" />
+    <PackageVersion Include="Umbraco.Cms.Web.Website" Version="[18.1.0,19.0.0)" />
   </ItemGroup>
 
   <!-- Test site: exactly the version the package is verified against. -->
   <ItemGroup>
-    <PackageVersion Include="Umbraco.Cms" Version="18.2.1" />
-    <PackageVersion Include="Umbraco.Cms.DevelopmentMode.Backoffice" Version="18.2.1" />
+    <PackageVersion Include="Umbraco.Cms" Version="18.1.0" />
+    <PackageVersion Include="Umbraco.Cms.DevelopmentMode.Backoffice" Version="18.1.0" />
     <!-- Must match UmbracoAppLocalIcuVersion in the test site's .csproj. -->
     <PackageVersion Include="Microsoft.ICU.ICU4C.Runtime" Version="72.1.0.3" />
   </ItemGroup>
