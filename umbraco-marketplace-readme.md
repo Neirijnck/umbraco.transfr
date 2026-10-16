@@ -1,12 +1,12 @@
 # Transfr
 
-Content compare for Umbraco 17: compare the content trees of two environments side by side, see a field-level diff per node, and copy nodes from one environment to another, key-preserving and always via a dry run first.
+Content compare for Umbraco 17 and 18: compare the content trees of two environments side by side, see a field-level diff per node, and copy nodes from one environment to another, key-preserving and always via a dry run first.
 
 > Copying documents from this environment to a remote works end to end; media, the other direction and field-level copies are on the [roadmap](#roadmap). Try it on environments you can restore first.
 
 - NuGet: `Neirijnck.Transfr`
-- Umbraco: 17.7.0 and later 17.x, on both sides
-- Versions: the major version follows Umbraco's, so Transfr 17.x is for Umbraco 17 (1.0.x were its first releases for Umbraco 17). Changes per version: [CHANGELOG.md](https://github.com/Neirijnck/umbraco.transfr/blob/master/CHANGELOG.md)
+- Umbraco: 18.2.1 and later 18.x with Transfr 18.x, or 17.7.0 and later 17.x with Transfr 17.x; both sides on the same Umbraco major
+- Versions: the major version follows Umbraco's, so Transfr 18.x is for Umbraco 18 and 17.x for Umbraco 17 (1.0.x were the first releases for Umbraco 17). Changes per version: [CHANGELOG.md](https://github.com/Neirijnck/umbraco.transfr/blob/master/CHANGELOG.md)
 - Licence: MIT
 
 ## What it does
@@ -32,6 +32,12 @@ Install it on the environment you compare **from** (typically your own machine o
 
 ```bash
 dotnet add package Neirijnck.Transfr
+```
+
+That takes the newest version, which is for the newest Umbraco major. On Umbraco 17, ask for the newest 17.x instead (see the versions on NuGet), for example:
+
+```bash
+dotnet add package Neirijnck.Transfr --version 17.0.0
 ```
 
 On first boot the package grants its section to the Administrators group and creates its own table, `transfrCopyHistory`, which records what was copied where (package migrations). Other groups can be given the section by hand, but the endpoints still require administrator rights.
@@ -110,7 +116,7 @@ The remotes, with a connection test per remote, and the form to connect one at r
 - Media are not copied yet. A node that uses a media item the remote doesn't have is still copied, with the reference as it is; the dry run lists the missing media.
 - A node that references a member can't be copied: members are never copied.
 - Both environments must come from the same installation (for example staging restored from production), so their document types share keys.
-- Measured against Umbraco 17.7.0 on both sides.
+- Measured against Umbraco 18.2.1 (Transfr 18.x) and 17.7.0 (Transfr 17.x), with both sides on the same version. A remote on another Umbraco major is not supported: the two answer in slightly different shapes.
 
 ## Roadmap
 
