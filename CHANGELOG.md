@@ -12,6 +12,10 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 - The Transfr section comes after a site's own sections in the backoffice header.
 
+## [17.1.0] - 2026-10-16
+
+The same changes as 18.1.0, for Umbraco 17.
+
 ## [18.0.1] - 2026-10-16
 
 ### Changed
