@@ -13,6 +13,10 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 - The selection stays in view while the trees scroll, and stands out more.
 
+## [17.2.0] - 2026-10-21
+
+The same changes as 18.2.0, for Umbraco 17.
+
 ## [18.1.0] - 2026-10-16
 
 ### Added
