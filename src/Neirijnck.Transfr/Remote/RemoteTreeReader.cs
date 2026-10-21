@@ -1,10 +1,11 @@
-﻿using Neirijnck.Transfr.Core.Remote;
+﻿using Neirijnck.Transfr.Core.Planning;
+using Neirijnck.Transfr.Core.Remote;
 using Neirijnck.Transfr.Core.Tree;
 
 namespace Neirijnck.Transfr.Remote;
 
 /// <summary>
-/// Reads a remote's document tree, and locates its documents and media items, through its Management API. Every
+/// Reads a remote's document or media tree, and locates its documents and media items, through its Management API. Every
 /// method reports how many requests it sent, so the cost of a compare stays visible.
 /// </summary>
 public sealed class RemoteTreeReader
@@ -22,22 +23,25 @@ public sealed class RemoteTreeReader
     }
 
     /// <summary>
-    /// The children of a document (null = the root), by sort order.
+    /// The children of a document, or of a media folder for <see cref="PlanItemKind.Media"/> (null = the root), by sort
+    /// order.
     /// </summary>
     public async Task<(IReadOnlyList<TreeNode> Nodes, int Requests)> ReadLevelAsync(
         RemoteDefinition remote,
         Guid? parentKey,
         string? preferredCulture,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        PlanItemKind kind = PlanItemKind.Document)
     {
+        var tree = kind == PlanItemKind.Media ? "media" : "document";
         var nodes = new List<TreeNode>();
         var requests = 0;
         int total;
         do
         {
             var path = parentKey is null
-                ? $"{RemoteRequestPolicy.ApiBase}/tree/document/root?skip={nodes.Count}&take={PageSize}"
-                : $"{RemoteRequestPolicy.ApiBase}/tree/document/children?parentId={parentKey}&skip={nodes.Count}&take={PageSize}";
+                ? $"{RemoteRequestPolicy.ApiBase}/tree/{tree}/root?skip={nodes.Count}&take={PageSize}"
+                : $"{RemoteRequestPolicy.ApiBase}/tree/{tree}/children?parentId={parentKey}&skip={nodes.Count}&take={PageSize}";
             var json = await this.client.GetStringAsync(remote, path, cancellationToken);
             requests++;
 

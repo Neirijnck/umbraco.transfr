@@ -9,7 +9,7 @@ import type {
   ValueDiffResponseModel,
 } from '../api/index.js';
 import { brandStyles } from './brand.js';
-import { blockStatusLabel, fieldLabel, fieldValue } from './diff-labels.js';
+import { blockStatusLabel, fieldLabel, fieldValue, isImageUrl } from './diff-labels.js';
 import {
   batchButtonLabel,
   batchHint,
@@ -70,7 +70,9 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
 
     const { data, error } = await tryExecute(
       this,
-      TransfrService.diffDocument({ path: { alias: this.data.alias, key: this.data.key } }),
+      this.#media
+        ? TransfrService.diffMedia({ path: { alias: this.data.alias, key: this.data.key } })
+        : TransfrService.diffDocument({ path: { alias: this.data.alias, key: this.data.key } }),
       { disableNotifications: true },
     );
     if (data) {
@@ -81,8 +83,12 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
     // The backoffice client replaces a 404's own message with a generic one, so say it here.
     this._error =
       (error as { status?: number } | undefined)?.status === 404
-        ? 'This node is not on both sides any more. Refresh the tree.'
-        : problemMessage(error, 'Comparing this node failed.');
+        ? `This ${this.#media ? 'media item' : 'node'} is not on both sides any more. Refresh the tree.`
+        : problemMessage(error, `Comparing this ${this.#media ? 'media item' : 'node'} failed.`);
+  }
+
+  get #media() {
+    return this.data?.kind === 'Media';
   }
 
   override render() {
@@ -163,7 +169,7 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
         ${
           diff.documentTypeName
             ? html`<span class="type"
-                ><umb-icon name="icon-document-dashed-line"></umb-icon>Document type:
+                ><umb-icon name="icon-document-dashed-line"></umb-icon>${this.#media ? 'Media type' : 'Document type'}:
                 <strong>${diff.documentTypeName}</strong></span
               >`
             : nothing
@@ -183,9 +189,10 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
         ></uui-toggle>
       </div>
 
+      ${this.#renderFiles(diff, remote)}
       ${
         fields.length > 0
-          ? html`<uui-box headline="Node">
+          ? html`<uui-box headline=${this.#media ? 'Media item' : 'Node'}>
               ${this.#renderHead(remote)}
               ${repeat(
                 fields,
@@ -213,6 +220,35 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
           : nothing
       }
     `;
+  }
+
+  // A media item's files on both sides, next to each other: an image shown, any other file as a link. Shown whether
+  // or not they differ: seeing the two is the point.
+  #renderFiles(diff: DocumentDiffResponseModel, remote: string) {
+    const files = diff.files ?? [];
+    if (files.length === 0) {
+      return nothing;
+    }
+
+    const show = (url: string | null | undefined, side: string) =>
+      !url
+        ? html`<span class="empty">No file ${side}</span>`
+        : isImageUrl(url)
+          ? html`<a class="file" href=${url} target="_blank" rel="noopener noreferrer" title="Open the file"
+              ><img src=${url} alt=${`The file ${side}`} loading="lazy"
+            /></a>`
+          : html`<a class="file" href=${url} target="_blank" rel="noopener noreferrer">${url.split('/').pop()}</a>`;
+    return html`<uui-box headline="Files">
+      ${this.#renderHead(remote)}
+      ${files.map(
+        (file) =>
+          html`<div class="columns row">
+            <span class="label-cell"><span class="label">${file.label}</span></span>
+            <span class="value local">${show(file.localUrl, 'here')}</span>
+            <span class="value remote">${show(file.remoteUrl, `on ${remote}`)}</span>
+          </div>`,
+      )}
+    </uui-box>`;
   }
 
   // Column heads inside each box, so they line up with the rows below them.
@@ -374,6 +410,22 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
         grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr) minmax(0, 2fr);
         gap: var(--uui-size-space-4);
         align-items: start;
+      }
+
+      /* A media file on each side: the image at a size both fit side by side, on a neutral backdrop for transparency. */
+      .file img {
+        display: block;
+        max-width: 100%;
+        max-height: 240px;
+        object-fit: contain;
+        border: 1px solid var(--uui-color-border);
+        border-radius: var(--uui-border-radius);
+        background: var(--uui-color-surface-alt);
+      }
+
+      .empty {
+        font-style: italic;
+        color: var(--uui-color-text-alt);
       }
 
       .head {

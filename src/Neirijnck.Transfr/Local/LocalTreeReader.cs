@@ -1,4 +1,5 @@
-﻿using Neirijnck.Transfr.Core.Tree;
+﻿using Neirijnck.Transfr.Core.Planning;
+using Neirijnck.Transfr.Core.Tree;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.Entities;
 using Umbraco.Cms.Core.Services;
@@ -8,7 +9,7 @@ using UmbracoConstants = Umbraco.Cms.Core.Constants;
 namespace Neirijnck.Transfr.Local;
 
 /// <summary>
-/// Reads this environment's document tree in-process, in the same shape as the remote's tree endpoints.
+/// Reads this environment's document and media trees in-process, in the same shape as the remote's tree endpoints.
 /// </summary>
 public sealed class LocalTreeReader
 {
@@ -24,17 +25,19 @@ public sealed class LocalTreeReader
     }
 
     /// <summary>
-    /// The children of a document (null = the root), by sort order, without trashed documents.
+    /// The children of a document, or of a media folder for <see cref="PlanItemKind.Media"/> (null = the root), by sort
+    /// order, without trashed items.
     /// </summary>
-    public IReadOnlyList<TreeNode> ReadLevel(Guid? parentKey, string? preferredCulture)
+    public IReadOnlyList<TreeNode> ReadLevel(Guid? parentKey, string? preferredCulture, PlanItemKind kind = PlanItemKind.Document)
     {
+        var objectType = ObjectTypeOf(kind);
         var nodes = new List<TreeNode>();
         long total;
         do
         {
             var page = this.entityService.GetPagedChildren(
                 parentKey ?? UmbracoConstants.System.RootKey,
-                UmbracoObjectTypes.Document,
+                objectType,
                 nodes.Count,
                 PageSize,
                 out total,
@@ -61,17 +64,20 @@ public sealed class LocalTreeReader
     /// <summary>
     /// Where these documents are here: key to parent key (null = the root). Unknown and trashed keys are left out.
     /// </summary>
-    public IReadOnlyDictionary<Guid, Guid?> Locate(IReadOnlyCollection<Guid> keys)
+    public IReadOnlyDictionary<Guid, Guid?> Locate(IReadOnlyCollection<Guid> keys, PlanItemKind kind = PlanItemKind.Document)
     {
         if (keys.Count == 0)
         {
             return new Dictionary<Guid, Guid?>();
         }
 
-        return this.entityService.GetAll(UmbracoObjectTypes.Document, keys.ToArray())
+        var objectType = ObjectTypeOf(kind);
+        return this.entityService.GetAll(objectType, keys.ToArray())
             .Where(entity => !entity.Trashed)
-            .ToDictionary(entity => entity.Key, entity => this.ParentKeyOf(entity, UmbracoObjectTypes.Document));
+            .ToDictionary(entity => entity.Key, entity => this.ParentKeyOf(entity, objectType));
     }
+
+    private static UmbracoObjectTypes ObjectTypeOf(PlanItemKind kind) => kind == PlanItemKind.Media ? UmbracoObjectTypes.Media : UmbracoObjectTypes.Document;
 
     /// <summary>
     /// These documents here with their parent, name and depth. Unknown and trashed keys are left out.

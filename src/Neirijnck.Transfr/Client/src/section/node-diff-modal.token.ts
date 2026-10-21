@@ -5,8 +5,10 @@ export type TransfrNodeDiffModalData = {
   /** The remote to compare with. */
   alias: string;
   remoteName: string;
-  /** The document's key, the same on both sides. */
+  /** The document's (or media item's) key, the same on both sides. */
   key: string;
+  /** A document (the default) or a media item: a media item shows its files, and has no fields to pick. */
+  kind?: 'Document' | 'Media';
   /** The document's name, for the headline while the diff loads. */
   name: string;
   /**

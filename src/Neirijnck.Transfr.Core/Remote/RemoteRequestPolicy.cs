@@ -22,6 +22,10 @@ public static class RemoteRequestPolicy
         new("GET", ApiBase + "/data-type/{id}"),
         new("GET", ApiBase + "/item/document-type/search"),
 
+        // The media tree, for the Media view.
+        new("GET", ApiBase + "/tree/media/root"),
+        new("GET", ApiBase + "/tree/media/children"),
+
         // Media the copied documents reference: each one, to compare it, and its media type, for the schema check.
         new("GET", ApiBase + "/media/{id}"),
         new("GET", ApiBase + "/media-type/{id}"),

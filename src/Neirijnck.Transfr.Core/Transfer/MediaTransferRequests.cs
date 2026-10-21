@@ -13,9 +13,6 @@ namespace Neirijnck.Transfr.Core.Transfer;
 /// </summary>
 public static class MediaTransferRequests
 {
-    // The editors whose value is a file: { src, ... } here, { temporaryFileId, ... } to upload a new one.
-    private static readonly HashSet<string> FileEditors = new(StringComparer.Ordinal) { "Umbraco.ImageCropper", "Umbraco.UploadField" };
-
     // Umbraco fills these in from the file on upload (posted values are overwritten, measured), so a difference in them
     // means another file even when its name, and so its path, is the same.
     private const string LabelEditor = "Umbraco.Label";
@@ -63,8 +60,9 @@ public static class MediaTransferRequests
         foreach (var (key, value) in DocumentJson.Entries(source["values"], withAlias: true))
         {
             var copy = (JsonObject)value.DeepClone();
-            var src = IsFile(value) ? SrcOf(value) : null;
-            var targetSrc = SrcOf(targetValues.FirstOrDefault(entry => entry.Key == key).Entry);
+            // A file value is { src, ... } here, { temporaryFileId, ... } to upload a new one.
+            var src = MediaFiles.IsFile(value) ? MediaFiles.SrcOf(value) : null;
+            var targetSrc = MediaFiles.SrcOf(targetValues.FirstOrDefault(entry => entry.Key == key).Entry);
 
             // An empty file here is sent as it is: that clears the file there too.
             if (!string.IsNullOrEmpty(src) && (labelsDiffer || !string.Equals(src, targetSrc, StringComparison.Ordinal)))
@@ -117,14 +115,9 @@ public static class MediaTransferRequests
         var source = DocumentJson.Parse(sourceJson, nameof(sourceJson));
         var written = DocumentJson.Entries(DocumentJson.Parse(writtenJson, nameof(writtenJson))["values"], withAlias: true);
         return [.. DocumentJson.Entries(source["values"], withAlias: true)
-            .Where(value => IsFile(value.Entry)
-                && !string.IsNullOrEmpty(SrcOf(value.Entry))
-                && string.IsNullOrEmpty(SrcOf(written.FirstOrDefault(entry => entry.Key == value.Key).Entry)))
+            .Where(value => MediaFiles.IsFile(value.Entry)
+                && !string.IsNullOrEmpty(MediaFiles.SrcOf(value.Entry))
+                && string.IsNullOrEmpty(MediaFiles.SrcOf(written.FirstOrDefault(entry => entry.Key == value.Key).Entry)))
             .Select(value => DocumentJson.StringOf(value.Entry["alias"]) ?? string.Empty)];
     }
-
-    private static bool IsFile(JsonObject value) => FileEditors.Contains(DocumentJson.StringOf(value["editorAlias"]) ?? string.Empty);
-
-    // The path in a file value (null for a value that isn't one, or has none).
-    private static string? SrcOf(JsonObject? value) => value?["value"] is JsonObject file ? DocumentJson.StringOf(file["src"]) : null;
 }

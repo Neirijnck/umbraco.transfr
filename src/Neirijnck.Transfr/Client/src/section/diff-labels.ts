@@ -24,9 +24,21 @@ export function fieldLabel(field: FieldDiffResponseModel): string {
           ? 'Template'
           : field.kind === 'DocumentType'
             ? 'Document type'
-            : field.kind;
+            : field.kind === 'MediaType'
+              ? 'Media type'
+              : field.kind;
   const where = [field.culture, field.segment].filter(Boolean).join(', ');
   return where ? `${what} (${where})` : what;
+}
+
+// The file types a browser shows as an image (the rest is offered as a link).
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg', 'bmp', 'ico']);
+
+/** Whether a media file's address names an image the panel can show, by its extension (a query string ignored). */
+export function isImageUrl(url: string | null | undefined): boolean {
+  const path = (url ?? '').split(/[?#]/)[0] ?? '';
+  const dot = path.lastIndexOf('.');
+  return dot >= 0 && IMAGE_EXTENSIONS.has(path.slice(dot + 1).toLowerCase());
 }
 
 /** A field's value for display: states in words, the rest as it comes. */

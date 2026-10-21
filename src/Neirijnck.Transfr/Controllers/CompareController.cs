@@ -75,6 +75,37 @@ public partial class CompareController : TransfrApiControllerBase
         });
 
     /// <summary>
+    /// Compares the children of one media folder (no parentKey = the root of the media tree) with the same level on the
+    /// remote.
+    /// </summary>
+    [HttpGet("remotes/{alias}/media/tree")]
+    [ProducesResponseType<TreeLevelResponseModel>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    public Task<IActionResult> CompareMediaTreeLevel(string alias, Guid? parentKey, CancellationToken cancellationToken)
+        => this.CompareWithAsync(alias, parentKey, async remote =>
+        {
+            var comparison = await this.treeCompare.CompareMediaLevelAsync(remote, parentKey, cancellationToken);
+            return this.Ok(new TreeLevelResponseModel(RowsOf(comparison), SeparateInstallOf([comparison]), comparison.RemoteRequests));
+        });
+
+    /// <summary>
+    /// Compares every level below one media folder (no parentKey = the whole media tree) with the remote, breadth first,
+    /// up to a node limit (Truncated says it was reached).
+    /// </summary>
+    [HttpGet("remotes/{alias}/media/subtree")]
+    [ProducesResponseType<SubtreeResponseModel>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    public Task<IActionResult> CompareMediaSubtree(string alias, Guid? parentKey, CancellationToken cancellationToken)
+        => this.CompareWithAsync(alias, parentKey, async remote =>
+        {
+            var subtree = await this.treeCompare.CompareMediaSubtreeAsync(remote, parentKey, cancellationToken);
+            var levels = subtree.Levels.Select(level => new SubtreeLevelResponseModel(level.ParentKey, RowsOf(level.Level))).ToList();
+            return this.Ok(new SubtreeResponseModel(levels, SeparateInstallOf(subtree.Levels.Select(level => level.Level)), subtree.RemoteRequests, subtree.Truncated));
+        });
+
+    /// <summary>
     /// One document on both sides, field by field and block by block, for the diff view. 404 when it isn't on both sides.
     /// </summary>
     [HttpGet("remotes/{alias}/document/{key:guid}/diff")]
@@ -91,6 +122,23 @@ public partial class CompareController : TransfrApiControllerBase
         });
 
     /// <summary>
+    /// One media item on both sides, value by value, with its files on both sides for the diff view. 404 when it isn't
+    /// on both sides.
+    /// </summary>
+    [HttpGet("remotes/{alias}/media/{key:guid}/diff")]
+    [ProducesResponseType<DocumentDiffResponseModel>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
+    public Task<IActionResult> DiffMedia(string alias, Guid key, CancellationToken cancellationToken)
+        => this.CompareWithAsync(alias, key, async remote =>
+        {
+            var result = await this.documentDiff.DiffMediaAsync(remote, key, cancellationToken);
+            return result is { } found
+                ? this.Ok(DocumentDiffResponses.From(found.Diff, found.Names, found.Files))
+                : this.Problem(title: "The media item is not on both sides", statusCode: StatusCodes.Status404NotFound);
+        });
+
+    /// <summary>
     /// The dry run of copying the selected documents (each with or without everything below it) from here to the
     /// remote. It only reads, on both sides. 400 when the selection is empty, unknown here or too large.
     /// </summary>
@@ -103,13 +151,13 @@ public partial class CompareController : TransfrApiControllerBase
     {
         if (request.Selection is not { Count: > 0 })
         {
-            return this.Problem(title: "Select at least one document", statusCode: StatusCodes.Status400BadRequest);
+            return this.Problem(title: "Select at least one node or media item", statusCode: StatusCodes.Status400BadRequest);
         }
 
         var (selection, invalid) = ReadSelection(request.Selection);
         if (invalid is not null)
         {
-            return this.Problem(title: "The selection names a field that can't be read", detail: invalid, statusCode: StatusCodes.Status400BadRequest);
+            return this.Problem(title: "The selection can't be read", detail: invalid, statusCode: StatusCodes.Status400BadRequest);
         }
 
         return await this.CompareWithAsync(alias, null, async remote =>
@@ -142,7 +190,7 @@ public partial class CompareController : TransfrApiControllerBase
     {
         if (request.Selection is not { Count: > 0 })
         {
-            return this.Problem(title: "Select at least one document", statusCode: StatusCodes.Status400BadRequest);
+            return this.Problem(title: "Select at least one node or media item", statusCode: StatusCodes.Status400BadRequest);
         }
 
         var dryRun = new List<DryRunRow>();
@@ -159,7 +207,7 @@ public partial class CompareController : TransfrApiControllerBase
         var (selection, invalid) = ReadSelection(request.Selection);
         if (invalid is not null)
         {
-            return this.Problem(title: "The selection names a field that can't be read", detail: invalid, statusCode: StatusCodes.Status400BadRequest);
+            return this.Problem(title: "The selection can't be read", detail: invalid, statusCode: StatusCodes.Status400BadRequest);
         }
 
         var overwrite = (request.Overwrite ?? []).ToHashSet();
@@ -187,6 +235,22 @@ public partial class CompareController : TransfrApiControllerBase
         var selection = new List<PlanSelection>();
         foreach (var choice in request)
         {
+            if (choice.Kind is not (null or nameof(PlanItemKind.Document) or nameof(PlanItemKind.Media)))
+            {
+                return ([], $"{choice.Key}: the kind is Document or Media, not {choice.Kind}.");
+            }
+
+            if (choice.Kind == nameof(PlanItemKind.Media))
+            {
+                if (choice.Fields is not null)
+                {
+                    return ([], $"{choice.Key}: a media item is picked whole, without fields.");
+                }
+
+                selection.Add(new PlanSelection(choice.Key, choice.IncludeDescendants, Kind: PlanItemKind.Media));
+                continue;
+            }
+
             if (choice.Fields is null)
             {
                 selection.Add(new PlanSelection(choice.Key, choice.IncludeDescendants));

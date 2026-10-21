@@ -33,6 +33,19 @@ export const manifests: Array<UmbExtensionManifest> = [
   },
   {
     type: 'sectionView',
+    alias: 'Transfr.SectionView.Media',
+    name: 'Transfr Media Compare',
+    weight: 175,
+    element: () => import('./media-compare.element.js'),
+    meta: {
+      label: 'Media',
+      pathname: 'media',
+      icon: 'icon-pictures',
+    },
+    conditions: [{ alias: 'Umb.Condition.SectionAlias', match: TRANSFR_SECTION_ALIAS }],
+  },
+  {
+    type: 'sectionView',
     alias: 'Transfr.SectionView.History',
     name: 'Transfr History',
     weight: 150,

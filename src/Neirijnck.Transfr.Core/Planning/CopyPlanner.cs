@@ -7,8 +7,8 @@ namespace Neirijnck.Transfr.Core.Planning;
 
 /// <summary>
 /// Builds the dry run of a copy from here to a target: one row per selected document with what the copy would do and
-/// why, plus one per media item the written documents reference (after the folders the target lacks for it), before the
-/// documents. Nothing is deleted, unpublished or moved, so a plan never says so: it reports what it leaves alone instead.
+/// why, plus one per media item picked or referenced by the written documents (after the folders the target lacks for
+/// it), before the documents. Nothing is deleted, unpublished or moved, so a plan never says so: it reports what it leaves alone instead.
 /// </summary>
 public static class CopyPlanner
 {
@@ -363,18 +363,20 @@ public static class CopyPlanner
         => source.Document.Fields is null ? source.Comparison!.IsIdentical : Differences(source).Count == 0;
 
     /// <summary>
-    /// The media the written documents reference, each after the folders the target lacks for it. A media item on the
-    /// target is compared like a document (unchanged, update, or a conflict against our last copy); a missing one is
-    /// created. Folders the target has are left alone: a copy never renames or moves them.
+    /// The media picked for the copy, then the media the written documents reference, each after the folders the target
+    /// lacks for it. A media item on the target is compared like a document (unchanged, update, or a conflict against our
+    /// last copy); a missing one is created. A folder planned only to hold an item is created when missing and otherwise
+    /// left alone (a copy never renames or moves it); a folder picked itself is compared like an item.
     /// </summary>
     private static List<PlanRow> MediaRows(List<PlanRow> documentRows, Dictionary<Guid, Source> sources, CopyPlanFacts facts)
     {
         var rows = new List<PlanRow>();
         var planned = new Dictionary<Guid, PlanRow>();
         var written = documentRows.Where(row => row.Outcome is PlanOutcome.Create or PlanOutcome.Update or PlanOutcome.Conflict);
-        var keys = written.SelectMany(row => sources[row.Key].References)
-            .Where(reference => reference.Kind == ReferenceKind.Media)
-            .Select(reference => reference.Key)
+        var keys = facts.PickedMedia
+            .Concat(written.SelectMany(row => sources[row.Key].References)
+                .Where(reference => reference.Kind == ReferenceKind.Media)
+                .Select(reference => reference.Key))
             .Distinct();
         foreach (var key in keys)
         {

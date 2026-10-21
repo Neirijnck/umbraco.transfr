@@ -117,6 +117,23 @@ public sealed class ManagementApiTreeParserTests
     }
 
     [Fact]
+    public void ParseTreePage_ReadsAMediaTree_WithTheMediaTypeAsTheType()
+    {
+        // tree/media/root as measured on an Umbraco 17.7.0 test site: a folder, then two images.
+        var (total, nodes) = ManagementApiTreeParser.ParseTreePage(Fixture("tree-media-root.json"), 0, "en-US");
+
+        Assert.Equal(3, total);
+        Assert.Equal(
+            [
+                ("Transfr Images", true, (Guid?)new Guid("f38bd2d7-65d0-48e6-95dc-87ce06ec2d3d"), "icon-folder"),
+                ("Green (unreferenced)", false, new Guid("cc07b313-0843-4aa8-bbda-871c8da728c8"), "icon-picture"),
+                ("Orange", false, new Guid("cc07b313-0843-4aa8-bbda-871c8da728c8"), "icon-picture"),
+            ],
+            nodes.Select(node => (node.Name, node.HasChildren, node.DocumentTypeKey, node.DocumentTypeIcon)));
+        Assert.Equal([0, 1, 2], nodes.Select(node => node.SortIndex));
+    }
+
+    [Fact]
     public void ParseMediaItems_KeepsTrashedMediaItems_WithoutTheirRecycleBinParent()
     {
         // item/media as measured on an Umbraco 17.7.0 test site; the second item as a trashed one is listed (isTrashed, the

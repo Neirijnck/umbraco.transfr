@@ -21,7 +21,7 @@ namespace Neirijnck.Transfr.Planning;
 /// </summary>
 public sealed partial class CopyPlanService
 {
-    /// <summary>Documents per plan: each costs a document request on both sides.</summary>
+    /// <summary>Documents and picked media items per plan: each costs a request on both sides.</summary>
     public const int MaxDocuments = 2000;
 
     // Remote document requests in flight at once, as for a tree compare.
@@ -76,8 +76,10 @@ public sealed partial class CopyPlanService
     {
         var stopwatch = Stopwatch.StartNew();
         var culture = await this.languageService.GetDefaultIsoCodeAsync();
-        var (nodes, wholeNodes) = this.Expand(selection, culture);
-        var fields = FieldSelection.Resolve(selection.Select(choice => (choice.Key, choice.Fields)), wholeNodes);
+        var documentChoices = selection.Where(choice => choice.Kind == PlanItemKind.Document).ToList();
+        var (nodes, wholeNodes) = this.Expand(documentChoices, culture);
+        var pickedMedia = this.ExpandMedia(selection.Where(choice => choice.Kind == PlanItemKind.Media).ToList(), nodes.Count);
+        var fields = FieldSelection.Resolve(documentChoices.Select(choice => (choice.Key, choice.Fields)), wholeNodes);
 
         // Local reads one at a time: Umbraco's ambient scope is not thread-safe.
         var sources = new List<SourceDocument>();
@@ -119,9 +121,13 @@ public sealed partial class CopyPlanService
         var schema = await this.schemaChecks.CheckAsync(remote, documentTypes, cancellationToken);
         requests += schema.RemoteRequests;
 
-        // The media the documents reference and the folders above them: read here one at a time (ambient scope), then
-        // located on the target, each referenced one there read whole to compare, and their media types checked.
-        var mediaKeys = references.Where(reference => reference.Kind == ReferenceKind.Media).Select(reference => reference.Key).Distinct().ToList();
+        // The media picked and the media the documents reference, and the folders above them: read here one at a time
+        // (ambient scope), then located on the target, each wanted one there read whole to compare, and their media types
+        // checked.
+        var mediaKeys = pickedMedia
+            .Concat(references.Where(reference => reference.Kind == ReferenceKind.Media).Select(reference => reference.Key))
+            .Distinct()
+            .ToList();
         var localMedia = new Dictionary<Guid, LocalMediaItem>();
         foreach (var (key, node) in this.localTree.MediaChains(mediaKeys))
         {
@@ -148,6 +154,7 @@ public sealed partial class CopyPlanService
             TargetSiblings = siblings,
             LocalSiblings = localSiblings,
             Schema = schema.Checks,
+            PickedMedia = pickedMedia,
             LocalMedia = localMedia,
             TargetMedia = targetMedia,
             MediaSchema = mediaSchema,
@@ -221,6 +228,66 @@ public sealed partial class CopyPlanService
         }
 
         return (nodes, wholeNodes);
+    }
+
+    // The media picked for the copy and, where asked, everything below them: parents before their children. Counted with
+    // the documents against the plan's limit.
+    private List<Guid> ExpandMedia(List<PlanSelection> selection, int documents)
+    {
+        if (selection.Count == 0)
+        {
+            return [];
+        }
+
+        var here = this.localTree.MediaNames(selection.Select(choice => choice.Key).Distinct().ToList());
+        var missing = selection.Select(choice => choice.Key).Where(key => !here.ContainsKey(key)).Distinct().ToList();
+        if (missing.Count > 0)
+        {
+            throw new PlanSelectionException("Some selected media items don't exist here, or are in the recycle bin.", missing);
+        }
+
+        var keys = new List<Guid>();
+        var seen = new HashSet<Guid>();
+        foreach (var choice in selection)
+        {
+            if (seen.Add(choice.Key))
+            {
+                keys.Add(choice.Key);
+            }
+
+            if (choice.IncludeDescendants)
+            {
+                this.AddMediaDescendants(choice.Key, keys, seen, documents);
+            }
+
+            if (documents + keys.Count > MaxDocuments)
+            {
+                throw new PlanSelectionException($"The selection holds more than {MaxDocuments} documents and media items; select less at once.");
+            }
+        }
+
+        return keys;
+    }
+
+    private void AddMediaDescendants(Guid parentKey, List<Guid> keys, HashSet<Guid> seen, int documents)
+    {
+        foreach (var child in this.localTree.ReadLevel(parentKey, null, PlanItemKind.Media))
+        {
+            if (seen.Add(child.Key))
+            {
+                keys.Add(child.Key);
+            }
+
+            if (documents + keys.Count > MaxDocuments)
+            {
+                return;
+            }
+
+            if (child.HasChildren)
+            {
+                this.AddMediaDescendants(child.Key, keys, seen, documents);
+            }
+        }
     }
 
     private void AddDescendants(LocalNode parent, string? culture, List<LocalNode> nodes, HashSet<Guid> seen)

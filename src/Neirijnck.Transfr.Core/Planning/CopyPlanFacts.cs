@@ -37,7 +37,13 @@ public sealed class CopyPlanFacts
     /// <summary>The schema check of each source's document type, by document type key.</summary>
     public required IReadOnlyDictionary<Guid, SchemaCheck> Schema { get; init; }
 
-    /// <summary>Referenced media items here and their ancestors, by key.</summary>
+    /// <summary>
+    /// Media items picked for the copy themselves (each picked folder's items included when picked with everything
+    /// below it), parents before their children: they are planned whether or not a written document uses them.
+    /// </summary>
+    public required IReadOnlyList<Guid> PickedMedia { get; init; }
+
+    /// <summary>Picked and referenced media items here and their ancestors, by key.</summary>
     public required IReadOnlyDictionary<Guid, LocalMediaItem> LocalMedia { get; init; }
 
     /// <summary>

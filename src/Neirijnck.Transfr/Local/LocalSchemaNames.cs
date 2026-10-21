@@ -25,7 +25,7 @@ public sealed class LocalSchemaNames
     public async Task<SchemaNames> ForAsync(DocumentDiff diff)
     {
         var typeKeys = new HashSet<Guid>();
-        foreach (var field in diff.Fields.Where(field => field.Kind == ContentDifferenceKind.DocumentType))
+        foreach (var field in diff.Fields.Where(field => field.Kind is ContentDifferenceKind.DocumentType or ContentDifferenceKind.MediaType))
         {
             AddKey(typeKeys, field.Local);
             AddKey(typeKeys, field.Remote);

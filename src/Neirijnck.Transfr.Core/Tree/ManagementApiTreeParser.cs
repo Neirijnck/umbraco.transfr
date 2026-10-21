@@ -3,8 +3,8 @@
 namespace Neirijnck.Transfr.Core.Tree;
 
 /// <summary>
-/// Reads the remote Management API's document tree responses (<c>tree/document/root|children</c> and
-/// <c>item/document</c>) into tree nodes.
+/// Reads the remote Management API's tree responses (<c>tree/document/root|children</c>, <c>tree/media/root|children</c>,
+/// <c>item/document</c>, <c>item/media</c>) into tree nodes.
 /// </summary>
 public static class ManagementApiTreeParser
 {
@@ -29,8 +29,8 @@ public static class ManagementApiTreeParser
                 NameOf(item, preferredCulture),
                 skip + index,
                 item.GetProperty("hasChildren").GetBoolean(),
-                DocumentTypeKeyOf(item),
-                DocumentTypeIconOf(item)))
+                TypeKeyOf(item),
+                TypeIconOf(item)))
             .ToList();
 
         return (root.GetProperty("total").GetInt32(), nodes);
@@ -87,17 +87,19 @@ public static class ManagementApiTreeParser
             && variants.EnumerateArray().Any(variant => variant.TryGetProperty("state", out var state)
                 && state.GetString() is "Published" or "PublishedPendingChanges");
 
-    private static Guid? DocumentTypeKeyOf(JsonElement item)
-        => item.TryGetProperty("documentType", out var type)
-            && type.ValueKind == JsonValueKind.Object
+    // A document names its type under documentType, a media item under mediaType.
+    private static JsonElement TypeOf(JsonElement item)
+        => item.TryGetProperty("documentType", out var type) || item.TryGetProperty("mediaType", out type) ? type : default;
+
+    private static Guid? TypeKeyOf(JsonElement item)
+        => TypeOf(item) is { ValueKind: JsonValueKind.Object } type
             && type.TryGetProperty("id", out var id)
             && id.TryGetGuid(out var key)
                 ? key
                 : null;
 
-    private static string? DocumentTypeIconOf(JsonElement item)
-        => item.TryGetProperty("documentType", out var type)
-            && type.ValueKind == JsonValueKind.Object
+    private static string? TypeIconOf(JsonElement item)
+        => TypeOf(item) is { ValueKind: JsonValueKind.Object } type
             && type.TryGetProperty("icon", out var icon)
             && icon.ValueKind == JsonValueKind.String
                 ? icon.GetString()

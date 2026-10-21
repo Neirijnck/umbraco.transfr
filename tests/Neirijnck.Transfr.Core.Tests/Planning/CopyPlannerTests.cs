@@ -129,6 +129,7 @@ public sealed class CopyPlannerTests
         LocalMediaItem[]? localMedia = null,
         Dictionary<Guid, TargetMediaItem>? targetMedia = null,
         SchemaCheck[]? mediaSchema = null,
+        Guid[]? pickedMedia = null,
         Dictionary<Guid, DateTimeOffset>? baseline = null)
         => new()
         {
@@ -141,6 +142,7 @@ public sealed class CopyPlannerTests
             Schema = (schema ?? [Ok(PageType), Ok(OtherType)]).ToDictionary(check => check.TypeKey),
             LocalMedia = (localMedia ?? []).ToDictionary(item => item.Key),
             TargetMedia = targetMedia ?? [],
+            PickedMedia = pickedMedia ?? [],
             MediaSchema = (mediaSchema ?? [Ok(ImageType), Ok(FolderType)]).ToDictionary(check => check.TypeKey),
             Baseline = baseline ?? [],
         };
@@ -794,5 +796,59 @@ public sealed class CopyPlannerTests
         // A referenced item on the target without its JSON, and a media type without a schema check.
         Assert.Throws<ArgumentException>(() => CopyPlanner.Plan(Facts([Source(Page, Document(image: Blue), Home)], localMedia: [Image(Blue, null)], targetMedia: new() { [Blue] = There(null) })));
         Assert.Throws<ArgumentException>(() => CopyPlanner.Plan(Facts([Source(Page, Document(image: Blue), Home)], localMedia: [Image(Blue, null)], mediaSchema: [Ok(FolderType)])));
+    }
+
+    [Fact]
+    public void Plan_PlansPickedMediaWithoutAnyDocument_AfterTheFoldersTheTargetLacks()
+    {
+        var rows = CopyPlanner.Plan(Facts(
+            [],
+            localMedia: [Folder(Images, null, "Images"), Folder(Nested, Images, "Nested"), Image(Blue, Nested)],
+            targetMedia: new() { [Images] = There(null) },
+            pickedMedia: [Blue]));
+
+        Assert.Equal([(Nested, PlanOutcome.Create), (Blue, PlanOutcome.Create)], rows.Select(row => (row.Key, row.Outcome)));
+    }
+
+    [Fact]
+    public void Plan_ComparesAPickedMediaItemTheTargetHas()
+    {
+        var same = Assert.Single(CopyPlanner.Plan(Facts([], localMedia: [Image(Blue, null)], targetMedia: new() { [Blue] = There(null, MediaJson()) }, pickedMedia: [Blue])));
+        var changed = Assert.Single(CopyPlanner.Plan(Facts(
+            [],
+            localMedia: [Image(Blue, null)],
+            targetMedia: new() { [Blue] = There(null, MediaJson(src: "/media/abcd1234/old.png")) },
+            pickedMedia: [Blue],
+            baseline: CopiedAsIs(Blue))));
+
+        AssertRow(same, PlanOutcome.Unchanged);
+        AssertRow(changed, PlanOutcome.Update);
+    }
+
+    [Fact]
+    public void Plan_ComparesAPickedFolder_ButLeavesAFolderThatOnlyHoldsAnItemAlone()
+    {
+        // The target has both, its folder under another name.
+        var facts = (Guid picked) => Facts(
+            [],
+            localMedia: [Folder(Images, null, "Images"), Image(Blue, Images)],
+            targetMedia: new() { [Images] = There(null, MediaJson(FolderType, name: "Pictures")), [Blue] = There(Images, MediaJson()) },
+            pickedMedia: [picked]);
+
+        var folder = Assert.Single(CopyPlanner.Plan(facts(Images)));
+        AssertRow(folder, PlanOutcome.Conflict, new PlanNote(PlanNoteKind.NoBaseline));
+        Assert.Equal([new ContentDifference(ContentDifferenceKind.Name)], folder.Differences);
+        Assert.Equal([Blue], CopyPlanner.Plan(facts(Blue)).Select(row => row.Key));
+    }
+
+    [Fact]
+    public void Plan_PlansAMediaItemPickedAndReferencedOnce_PickedFirst()
+    {
+        var rows = CopyPlanner.Plan(Facts(
+            [Source(Page, Document(image: Blue), Home)],
+            localMedia: [Image(Blue, null), Image(Nested, null, "Nested image")],
+            pickedMedia: [Nested, Blue]));
+
+        Assert.Equal([Nested, Blue, Page], rows.Select(row => row.Key));
     }
 }

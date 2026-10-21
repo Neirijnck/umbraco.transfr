@@ -108,7 +108,13 @@ export class TransfrHistoryElement extends UmbLitElement {
 
     const remote = this._remotes?.find((candidate) => candidate.alias === alias);
     umbOpenModal(this, TRANSFR_NODE_DIFF_MODAL, {
-      data: { alias, remoteName: remote?.name ?? alias, key: document.key, name: document.name },
+      data: {
+        alias,
+        remoteName: remote?.name ?? alias,
+        key: document.key,
+        name: document.name,
+        kind: document.kind === 'Media' ? 'Media' : 'Document',
+      },
     }).catch(() => undefined);
   }
 
@@ -192,19 +198,16 @@ export class TransfrHistoryElement extends UmbLitElement {
               <li>
                 <umb-icon name=${document.kind === 'Media' ? 'icon-picture' : 'icon-document'}></umb-icon>
                 ${
-                  document.name && document.kind === 'Media'
-                    ? // Media have no diff panel yet: plain text, not styled like the clickable page names.
-                      html`<span>${document.name}</span>`
-                    : document.name
-                      ? html`<button
-                          type="button"
-                          class="name"
-                          title="Compare with the remote"
-                          @click=${() => this.#openDiff(document)}
-                        >
-                          ${document.name}
-                        </button>`
-                      : html`<span class="gone">No longer here</span> <small>${document.key}</small>`
+                  document.name
+                    ? html`<button
+                        type="button"
+                        class="name"
+                        title="Compare with the remote"
+                        @click=${() => this.#openDiff(document)}
+                      >
+                        ${document.name}
+                      </button>`
+                    : html`<span class="gone">No longer here</span> <small>${document.key}</small>`
                 }
                 <uui-tag look="secondary">${outcomeWord(document.outcome)}</uui-tag>
               </li>

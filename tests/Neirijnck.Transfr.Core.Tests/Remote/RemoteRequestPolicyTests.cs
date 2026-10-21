@@ -19,6 +19,8 @@ public sealed class RemoteRequestPolicyTests
         "GET " + Api + "/document-type/{id}",
         "GET " + Api + "/data-type/{id}",
         "GET " + Api + "/item/document-type/search",
+        "GET " + Api + "/tree/media/root",
+        "GET " + Api + "/tree/media/children",
         "GET " + Api + "/media/{id}",
         "GET " + Api + "/media-type/{id}",
         "GET " + Api + "/document/{id}/audit-log",
@@ -83,6 +85,8 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("GET", Api + "/data-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/item/document-type/search?query=Home")]
     [InlineData("GET", Api + "/media/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("GET", Api + "/tree/media/root?skip=0&take=100")]
+    [InlineData("GET", Api + "/tree/media/children?parentId=3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b&skip=0&take=100")]
     [InlineData("GET", Api + "/media-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("POST", Api + "/temporary-file")]
     [InlineData("POST", Api + "/media")]
@@ -107,7 +111,6 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("GET", Api + "/security/back-office/token")]
     [InlineData("GET", Api + "/tree/document/root/extra")]
     [InlineData("GET", Api + "/tree/document")]
-    [InlineData("GET", Api + "/tree/media/root")]
     [InlineData("GET", Api + "/tree/document/../../user")]
     [InlineData("GET", Api + "/tree/document/%2E%2E/root")]
     [InlineData("GET", "/umbraco/management/api/v2/tree/document/root")]
@@ -150,6 +153,8 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("GET", Api + "/media/urls")]
     [InlineData("GET", Api + "/media/configuration")]
     [InlineData("GET", Api + "/tree/media-type/root")]
+    [InlineData("GET", Api + "/tree/media/siblings")]
+    [InlineData("GET", Api + "/tree/member/root")]
     [InlineData("DELETE", Api + "/media-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     public void IsAllowed_RejectsEverythingElse(string method, string path)
     {
@@ -168,7 +173,7 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("https://other.example.com" + Api + "/tree/document/root")]
     [InlineData("http://localhost:44372" + Api + "/tree/document/root")]
     [InlineData("https://localhost:44373" + Api + "/tree/document/root")]
-    [InlineData("https://localhost:44372" + Api + "/tree/media/root")]
+    [InlineData("https://localhost:44372" + Api + "/tree/member/root")]
     [InlineData("https://other.example.com" + Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     public void EnsureAllowed_ThrowsForOtherHostsAndUnlistedPaths(string requestUri)
     {

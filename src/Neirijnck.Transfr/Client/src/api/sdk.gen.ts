@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CompareSubtreeData, CompareSubtreeErrors, CompareSubtreeResponses, CompareTreeLevelData, CompareTreeLevelErrors, CompareTreeLevelResponses, ConnectData, ConnectErrors, ConnectResponses, DiffDocumentData, DiffDocumentErrors, DiffDocumentResponses, DisconnectData, DisconnectErrors, DisconnectResponses, GetHistoryData, GetHistoryErrors, GetHistoryResponses, GetRemotesData, GetRemotesErrors, GetRemotesResponses, GetStatusData, GetStatusErrors, GetStatusResponses, PlanCopyData, PlanCopyErrors, PlanCopyResponses, TransferData, TransferErrors, TransferResponses } from './types.gen';
+import type { CompareMediaSubtreeData, CompareMediaSubtreeErrors, CompareMediaSubtreeResponses, CompareMediaTreeLevelData, CompareMediaTreeLevelErrors, CompareMediaTreeLevelResponses, CompareSubtreeData, CompareSubtreeErrors, CompareSubtreeResponses, CompareTreeLevelData, CompareTreeLevelErrors, CompareTreeLevelResponses, ConnectData, ConnectErrors, ConnectResponses, DiffDocumentData, DiffDocumentErrors, DiffDocumentResponses, DiffMediaData, DiffMediaErrors, DiffMediaResponses, DisconnectData, DisconnectErrors, DisconnectResponses, GetHistoryData, GetHistoryErrors, GetHistoryResponses, GetRemotesData, GetRemotesErrors, GetRemotesResponses, GetStatusData, GetStatusErrors, GetStatusResponses, PlanCopyData, PlanCopyErrors, PlanCopyResponses, TransferData, TransferErrors, TransferResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -59,6 +59,30 @@ export class TransfrService {
         return (options.client ?? client).get<GetHistoryResponses, GetHistoryErrors, ThrowOnError>({
             security: [{ scheme: 'bearer', type: 'http' }],
             url: '/umbraco/management/api/v1/transfr/remotes/{alias}/history',
+            ...options
+        });
+    }
+    
+    public static diffMedia<ThrowOnError extends boolean = false>(options: Options<DiffMediaData, ThrowOnError>): RequestResult<DiffMediaResponses, DiffMediaErrors, ThrowOnError> {
+        return (options.client ?? client).get<DiffMediaResponses, DiffMediaErrors, ThrowOnError>({
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/umbraco/management/api/v1/transfr/remotes/{alias}/media/{key}/diff',
+            ...options
+        });
+    }
+    
+    public static compareMediaSubtree<ThrowOnError extends boolean = false>(options: Options<CompareMediaSubtreeData, ThrowOnError>): RequestResult<CompareMediaSubtreeResponses, CompareMediaSubtreeErrors, ThrowOnError> {
+        return (options.client ?? client).get<CompareMediaSubtreeResponses, CompareMediaSubtreeErrors, ThrowOnError>({
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/umbraco/management/api/v1/transfr/remotes/{alias}/media/subtree',
+            ...options
+        });
+    }
+    
+    public static compareMediaTreeLevel<ThrowOnError extends boolean = false>(options: Options<CompareMediaTreeLevelData, ThrowOnError>): RequestResult<CompareMediaTreeLevelResponses, CompareMediaTreeLevelErrors, ThrowOnError> {
+        return (options.client ?? client).get<CompareMediaTreeLevelResponses, CompareMediaTreeLevelErrors, ThrowOnError>({
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/umbraco/management/api/v1/transfr/remotes/{alias}/media/tree',
             ...options
         });
     }
