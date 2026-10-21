@@ -4,6 +4,8 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 ## [Unreleased]
 
+## [17.2.0] - 2026-10-21
+
 ### Added
 
 - Media: the media a copied node uses are copied along, with the same keys: created with their folders when the remote lacks them, updated when they changed here, and skipped as a conflict (or overwritten, when chosen) when they changed there. A file is uploaded only when it is new or changed. The copy history records media too.
