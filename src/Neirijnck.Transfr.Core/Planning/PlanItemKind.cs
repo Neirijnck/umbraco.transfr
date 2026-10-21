@@ -7,6 +7,6 @@ public enum PlanItemKind
 {
     Document,
 
-    /// <summary>A media item (or folder) a copied document needs, planned along.</summary>
+    /// <summary>A media item a copied document references, or a folder it needs, planned along.</summary>
     Media,
 }

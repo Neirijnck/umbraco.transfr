@@ -1,4 +1,5 @@
 ﻿using Neirijnck.Transfr.Core.Content;
+using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
 
 namespace Neirijnck.Transfr.Local;
@@ -11,18 +12,20 @@ namespace Neirijnck.Transfr.Local;
 public sealed class LocalSchemaNames
 {
     private readonly IContentTypeService contentTypeService;
+    private readonly IMediaTypeService mediaTypeService;
     private readonly ITemplateService templateService;
 
-    public LocalSchemaNames(IContentTypeService contentTypeService, ITemplateService templateService)
+    public LocalSchemaNames(IContentTypeService contentTypeService, IMediaTypeService mediaTypeService, ITemplateService templateService)
     {
         this.contentTypeService = contentTypeService;
+        this.mediaTypeService = mediaTypeService;
         this.templateService = templateService;
     }
 
     public async Task<SchemaNames> ForAsync(DocumentDiff diff)
     {
         var typeKeys = new HashSet<Guid>();
-        foreach (var field in diff.Fields.Where(field => field.Kind == ContentDifferenceKind.DocumentType))
+        foreach (var field in diff.Fields.Where(field => field.Kind is ContentDifferenceKind.DocumentType or ContentDifferenceKind.MediaType))
         {
             AddKey(typeKeys, field.Local);
             AddKey(typeKeys, field.Remote);
@@ -55,12 +58,12 @@ public sealed class LocalSchemaNames
     }
 
     /// <summary>
-    /// A document or element type's name and its property labels (compositions included), or null when this
+    /// A document, element or media type's name and its property labels (compositions included), or null when this
     /// environment doesn't have it.
     /// </summary>
     public ContentTypeNames? TypeNames(Guid key)
     {
-        var type = this.contentTypeService.Get(key);
+        IContentTypeComposition? type = this.contentTypeService.Get(key) ?? (IContentTypeComposition?)this.mediaTypeService.Get(key);
         if (type is null)
         {
             return null;
@@ -81,6 +84,23 @@ public sealed class LocalSchemaNames
         foreach (var key in keys.Distinct())
         {
             if (this.contentTypeService.Get(key) is { } type)
+            {
+                names[key] = type.Name ?? type.Alias;
+            }
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// The names of these media types here; keys this environment doesn't have are left out.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, string> MediaTypeNames(IEnumerable<Guid> keys)
+    {
+        var names = new Dictionary<Guid, string>();
+        foreach (var key in keys.Distinct())
+        {
+            if (this.mediaTypeService.Get(key) is { } type)
             {
                 names[key] = type.Name ?? type.Alias;
             }

@@ -1,4 +1,6 @@
-﻿namespace Neirijnck.Transfr.Core.Content;
+﻿using System.Text.Json.Nodes;
+
+namespace Neirijnck.Transfr.Core.Content;
 
 /// <summary>
 /// Compares one document on both sides, each as the Management API returns it (<c>GET document/{id}</c>). Only what a
@@ -25,6 +27,14 @@ public static class ContentComparer
             differences.Add(new ContentDifference(ContentDifferenceKind.Template));
         }
 
+        CompareVariantsAndValues(local, remote, differences);
+        return new ContentComparison(differences);
+    }
+
+    // Names and publish states per variant, then every value; shared with the media comparer (media variants carry no
+    // state, so it never differs there).
+    internal static void CompareVariantsAndValues(JsonObject local, JsonObject remote, List<ContentDifference> differences)
+    {
         var localVariants = DocumentJson.Entries(local["variants"], withAlias: false);
         var remoteVariants = DocumentJson.Entries(remote["variants"], withAlias: false);
         foreach (var key in DocumentJson.UnionInOrder(localVariants.Select(v => v.Key), remoteVariants.Select(v => v.Key)))
@@ -60,7 +70,5 @@ public static class ContentComparer
                 differences.Add(new ContentDifference(ContentDifferenceKind.Value, DocumentJson.StringOf(entry?["alias"]), culture, segment));
             }
         }
-
-        return new ContentComparison(differences);
     }
 }

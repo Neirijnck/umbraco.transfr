@@ -1,10 +1,11 @@
-﻿using Neirijnck.Transfr.Core.Remote;
+﻿using Neirijnck.Transfr.Core.Planning;
+using Neirijnck.Transfr.Core.Remote;
 
 namespace Neirijnck.Transfr.Remote;
 
 /// <summary>
-/// Reads who last changed documents on a remote: the newest content change in each one's audit log, and the users'
-/// names in one batch.
+/// Reads who last changed documents and media items on a remote: the newest content change in each one's audit log, and
+/// the users' names in one batch.
 /// </summary>
 public sealed class RemoteAuditReader
 {
@@ -21,12 +22,12 @@ public sealed class RemoteAuditReader
         this.client = client;
     }
 
-    /// <summary>The newest content change of a document, or null when its recent audit log has none.</summary>
-    public async Task<RemoteChange?> LastChangeAsync(RemoteDefinition remote, Guid key, CancellationToken cancellationToken)
+    /// <summary>The newest content change of a document or media item, or null when its recent audit log has none.</summary>
+    public async Task<RemoteChange?> LastChangeAsync(RemoteDefinition remote, PlanItemKind kind, Guid key, CancellationToken cancellationToken)
     {
         var json = await this.client.GetStringAsync(
             remote,
-            $"{RemoteRequestPolicy.ApiBase}/document/{key:D}/audit-log?orderDirection=Descending&skip=0&take={EntriesPerDocument}",
+            $"{RemoteRequestPolicy.ApiBase}/{(kind == PlanItemKind.Media ? "media" : "document")}/{key:D}/audit-log?orderDirection=Descending&skip=0&take={EntriesPerDocument}",
             cancellationToken);
         return ManagementApiAuditParser.LatestChange(json);
     }

@@ -10,16 +10,16 @@ namespace Neirijnck.Transfr.Core.Planning;
 /// <param name="Key">Its key, the same on the target after the copy.</param>
 /// <param name="ParentKey">Its parent here (null = root).</param>
 /// <param name="Name">Its name here.</param>
-/// <param name="DocumentTypeKey">For a document: its document type here.</param>
+/// <param name="DocumentTypeKey">For a document: its document type here; for a media item: its media type.</param>
 /// <param name="Outcome">What the copy would do.</param>
 /// <param name="Notes">Why, and what to know, in the order they were found.</param>
 /// <param name="PublishCultures">
 /// For a document that is written: the cultures to publish after writing (null = the invariant content); empty = save only.
 /// </param>
-/// <param name="Differences">For a document on both sides: what differs.</param>
+/// <param name="Differences">For a document or media item on both sides: what differs.</param>
 /// <param name="SchemaProblems">For a schema mismatch: the problems.</param>
 /// <param name="Fingerprint">
-/// For a document: what the dry run saw of it on both sides; a transfer refuses when it changed since.
+/// What the dry run saw of it on both sides; a transfer refuses when it changed since.
 /// </param>
 /// <param name="Fields">For a field-level copy: the fields carried over (the differences are theirs only); null = the whole node.</param>
 public sealed record PlanRow(

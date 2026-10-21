@@ -7,16 +7,17 @@ namespace Neirijnck.Transfr.Core.Planning;
 
 /// <summary>
 /// Builds the dry run of a copy from here to a target: one row per selected document with what the copy would do and
-/// why, plus the media items those documents need that the target lacks (with their folder chain), before the documents.
-/// Nothing is deleted, unpublished or moved, so a plan never says so: it reports what it leaves alone instead.
+/// why, plus one per media item picked or referenced by the written documents (after the folders the target lacks for
+/// it), before the documents. Nothing is deleted, unpublished or moved, so a plan never says so: it reports what it leaves alone instead.
 /// </summary>
 public static class CopyPlanner
 {
     /// <exception cref="ArgumentException">
-    /// A source is listed twice, a source's document type has no schema check, or a planned media item's ancestor is
-    /// missing from <see cref="CopyPlanFacts.LocalMedia"/>.
+    /// A source is listed twice, a source's document type or a planned media item's media type has no schema check, a
+    /// planned media item's ancestor is missing from <see cref="CopyPlanFacts.LocalMedia"/>, or a referenced media item
+    /// on the target comes without its JSON.
     /// </exception>
-    /// <exception cref="System.Text.Json.JsonException">A document is not valid JSON.</exception>
+    /// <exception cref="System.Text.Json.JsonException">A document or media item is not valid JSON.</exception>
     public static IReadOnlyList<PlanRow> Plan(CopyPlanFacts facts)
     {
         ArgumentNullException.ThrowIfNull(facts);
@@ -289,7 +290,7 @@ public static class CopyPlanner
         }
 
         foreach (var reference in source.References.Where(reference => reference.Kind == ReferenceKind.Media
-            && !facts.MediaOnTarget.Contains(reference.Key)
+            && !IsOnTarget(reference.Key, facts)
             && !facts.LocalMedia.ContainsKey(reference.Key)))
         {
             notes.Add(new PlanNote(PlanNoteKind.MediaMissingHere, reference.Key, reference.PropertyAlias, reference.Culture));
@@ -361,43 +362,131 @@ public static class CopyPlanner
     private static bool IsIdentical(Source source)
         => source.Document.Fields is null ? source.Comparison!.IsIdentical : Differences(source).Count == 0;
 
-    // The media the written documents reference that the target lacks, each after the folders it needs.
+    /// <summary>
+    /// The media picked for the copy, then the media the written documents reference, each after the folders the target
+    /// lacks for it. A media item on the target is compared like a document (unchanged, update, or a conflict against our
+    /// last copy); a missing one is created. A folder planned only to hold an item is created when missing and otherwise
+    /// left alone (a copy never renames or moves it); a folder picked itself is compared like an item.
+    /// </summary>
     private static List<PlanRow> MediaRows(List<PlanRow> documentRows, Dictionary<Guid, Source> sources, CopyPlanFacts facts)
     {
         var rows = new List<PlanRow>();
-        var planned = new HashSet<Guid>();
+        var planned = new Dictionary<Guid, PlanRow>();
         var written = documentRows.Where(row => row.Outcome is PlanOutcome.Create or PlanOutcome.Update or PlanOutcome.Conflict);
-        foreach (var reference in written.SelectMany(row => sources[row.Key].References).Where(reference => reference.Kind == ReferenceKind.Media))
+        var keys = facts.PickedMedia
+            .Concat(written.SelectMany(row => sources[row.Key].References)
+                .Where(reference => reference.Kind == ReferenceKind.Media)
+                .Select(reference => reference.Key))
+            .Distinct();
+        foreach (var key in keys)
         {
-            if (facts.MediaOnTarget.Contains(reference.Key) || !facts.LocalMedia.TryGetValue(reference.Key, out var item))
+            if (planned.ContainsKey(key) || !facts.LocalMedia.TryGetValue(key, out var item))
             {
                 continue;
             }
 
-            // Up to the first folder the target has (or one planned already, or the root).
+            // Up to the first folder the target has (or one planned already, or the root). An item the target has
+            // (even in its recycle bin) needs no folders: it stays where it is there.
             var chain = new List<LocalMediaItem>();
-            var current = item;
-            while (!planned.Contains(current.Key))
+            var parentKey = facts.TargetMedia.ContainsKey(item.Key) ? null : item.ParentKey;
+            while (parentKey is { } folderKey && !planned.ContainsKey(folderKey) && !IsOnTarget(folderKey, facts))
             {
-                chain.Add(current);
-                if (current.ParentKey is not { } parentKey || facts.MediaOnTarget.Contains(parentKey))
-                {
-                    break;
-                }
-
-                current = facts.LocalMedia.GetValueOrDefault(parentKey)
-                    ?? throw new ArgumentException($"The media folder {parentKey} of {current.Key} is not given.", nameof(facts));
+                var folder = facts.LocalMedia.GetValueOrDefault(folderKey)
+                    ?? throw new ArgumentException($"The media folder {folderKey} of {item.Key} is not given.", nameof(facts));
+                chain.Add(folder);
+                parentKey = folder.ParentKey;
             }
 
             chain.Reverse();
-            foreach (var media in chain.Where(media => planned.Add(media.Key)))
+            foreach (var media in chain.Append(item))
             {
-                rows.Add(new PlanRow(PlanItemKind.Media, media.Key, media.ParentKey, media.Name, null, PlanOutcome.Create, [], [], [], []));
+                var row = MediaRow(media, media.Key == key, planned, facts);
+                planned[media.Key] = row;
+                rows.Add(row);
             }
         }
 
         return rows;
     }
+
+    // A referenced media item, or a folder above one that the target lacks (or holds in its recycle bin).
+    private static PlanRow MediaRow(LocalMediaItem item, bool referenced, Dictionary<Guid, PlanRow> planned, CopyPlanFacts facts)
+    {
+        var json = DocumentJson.Parse(item.Json, nameof(facts));
+        var mediaTypeKey = DocumentJson.IdOf(json["mediaType"])
+            ?? throw new ArgumentException($"The media item {item.Key} names no media type.", nameof(facts));
+        if (!facts.MediaSchema.TryGetValue(mediaTypeKey, out var schema))
+        {
+            throw new ArgumentException($"No schema check for the media type {mediaTypeKey} of {item.Key}.", nameof(facts));
+        }
+
+        var target = facts.TargetMedia.GetValueOrDefault(item.Key);
+        var onTarget = target is { IsTrashed: false };
+        var targetJson = onTarget && referenced
+            ? DocumentJson.Parse(target!.Json ?? throw new ArgumentException($"The media item {item.Key} on the target comes without its JSON.", nameof(facts)), nameof(facts))
+            : null;
+        var comparison = targetJson is null ? null : MediaComparer.Compare(item.Json, target!.Json!);
+        var differences = comparison?.Differences ?? [];
+        var fingerprint = PlanFingerprint.Of(json, targetJson);
+
+        var notes = new List<PlanNote>();
+        if (!schema.IsOk)
+        {
+            notes.Add(new PlanNote(PlanNoteKind.SchemaMismatch, mediaTypeKey));
+        }
+
+        if (target is { IsTrashed: true })
+        {
+            notes.Add(new PlanNote(PlanNoteKind.TrashedOnTarget));
+        }
+        else if (targetJson is not null && DocumentJson.IdOf(targetJson["mediaType"]) != mediaTypeKey)
+        {
+            notes.Add(new PlanNote(PlanNoteKind.MediaTypeDiffers, DocumentJson.IdOf(targetJson["mediaType"])));
+        }
+        else if (!onTarget && item.ParentKey is { } parentKey && planned.TryGetValue(parentKey, out var parent) && parent.Outcome == PlanOutcome.Blocked)
+        {
+            notes.Add(new PlanNote(PlanNoteKind.ParentBlocked, parentKey));
+        }
+
+        if (notes.Count > 0)
+        {
+            return new PlanRow(PlanItemKind.Media, item.Key, item.ParentKey, item.Name, mediaTypeKey, PlanOutcome.Blocked, notes, [], differences, schema.Problems, fingerprint);
+        }
+
+        if (target is not null && target.ParentKey != item.ParentKey)
+        {
+            notes.Add(new PlanNote(PlanNoteKind.UnderAnotherParentOnTarget, target.ParentKey));
+        }
+
+        PlanOutcome outcome;
+        if (targetJson is null)
+        {
+            outcome = PlanOutcome.Create;
+        }
+        else if (comparison!.IsIdentical)
+        {
+            outcome = PlanOutcome.Unchanged;
+        }
+        else if (!facts.Baseline.TryGetValue(item.Key, out var copiedAt))
+        {
+            outcome = PlanOutcome.Conflict;
+            notes.Add(new PlanNote(PlanNoteKind.NoBaseline));
+        }
+        else if (DocumentJson.LastUpdate(targetJson) == copiedAt)
+        {
+            outcome = PlanOutcome.Update;
+        }
+        else
+        {
+            outcome = PlanOutcome.Conflict;
+            notes.Add(new PlanNote(PlanNoteKind.ChangedSinceLastCopy));
+        }
+
+        return new PlanRow(PlanItemKind.Media, item.Key, item.ParentKey, item.Name, mediaTypeKey, outcome, notes, [], differences, schema.Problems, fingerprint);
+    }
+
+    // Whether the target has this media item or folder outside its recycle bin.
+    private static bool IsOnTarget(Guid key, CopyPlanFacts facts) => facts.TargetMedia.TryGetValue(key, out var target) && !target.IsTrashed;
 
     private static string Fingerprint(Source source) => PlanFingerprint.Of(source.Json, source.TargetJson);
 

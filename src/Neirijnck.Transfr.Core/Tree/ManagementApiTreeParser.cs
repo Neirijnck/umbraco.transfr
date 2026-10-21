@@ -3,8 +3,8 @@
 namespace Neirijnck.Transfr.Core.Tree;
 
 /// <summary>
-/// Reads the remote Management API's document tree responses (<c>tree/document/root|children</c> and
-/// <c>item/document</c>) into tree nodes.
+/// Reads the remote Management API's tree responses (<c>tree/document/root|children</c>, <c>tree/media/root|children</c>,
+/// <c>item/document</c>, <c>item/media</c>) into tree nodes.
 /// </summary>
 public static class ManagementApiTreeParser
 {
@@ -29,8 +29,8 @@ public static class ManagementApiTreeParser
                 NameOf(item, preferredCulture),
                 skip + index,
                 item.GetProperty("hasChildren").GetBoolean(),
-                DocumentTypeKeyOf(item),
-                DocumentTypeIconOf(item)))
+                TypeKeyOf(item),
+                TypeIconOf(item)))
             .ToList();
 
         return (root.GetProperty("total").GetInt32(), nodes);
@@ -63,23 +63,43 @@ public static class ManagementApiTreeParser
                     IsPublished(item)));
     }
 
+    /// <summary>
+    /// Where the requested media items (<c>item/media</c>) are, keeping the trashed ones: a key that is in the recycle bin
+    /// can't be created again (measured: a create with that key is refused), so it must not count as missing. The parent of
+    /// a trashed item (the recycle bin) is left out.
+    /// </summary>
+    public static IReadOnlyDictionary<Guid, (Guid? ParentKey, bool IsTrashed)> ParseMediaItems(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        return document.RootElement
+            .EnumerateArray()
+            .ToDictionary(
+                item => item.GetProperty("id").GetGuid(),
+                item => item.GetProperty("isTrashed").GetBoolean()
+                    ? ((Guid?)null, true)
+                    : (item.GetProperty("parent") is { ValueKind: JsonValueKind.Object } parent ? parent.GetProperty("id").GetGuid() : null, false));
+    }
+
     private static bool IsPublished(JsonElement item)
         => item.TryGetProperty("variants", out var variants)
             && variants.ValueKind == JsonValueKind.Array
             && variants.EnumerateArray().Any(variant => variant.TryGetProperty("state", out var state)
                 && state.GetString() is "Published" or "PublishedPendingChanges");
 
-    private static Guid? DocumentTypeKeyOf(JsonElement item)
-        => item.TryGetProperty("documentType", out var type)
-            && type.ValueKind == JsonValueKind.Object
+    // A document names its type under documentType, a media item under mediaType.
+    private static JsonElement TypeOf(JsonElement item)
+        => item.TryGetProperty("documentType", out var type) || item.TryGetProperty("mediaType", out type) ? type : default;
+
+    private static Guid? TypeKeyOf(JsonElement item)
+        => TypeOf(item) is { ValueKind: JsonValueKind.Object } type
             && type.TryGetProperty("id", out var id)
             && id.TryGetGuid(out var key)
                 ? key
                 : null;
 
-    private static string? DocumentTypeIconOf(JsonElement item)
-        => item.TryGetProperty("documentType", out var type)
-            && type.ValueKind == JsonValueKind.Object
+    private static string? TypeIconOf(JsonElement item)
+        => TypeOf(item) is { ValueKind: JsonValueKind.Object } type
             && type.TryGetProperty("icon", out var icon)
             && icon.ValueKind == JsonValueKind.String
                 ? icon.GetString()

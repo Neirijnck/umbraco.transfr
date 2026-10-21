@@ -91,8 +91,12 @@ export function describeLastCopy(copy: LastCopyResponseModel, remoteName: string
   return `Last copied to ${remoteName}${copy.by ? ` by ${copy.by}` : ''}, ${formatWhen(copy.at, timeZone)}`;
 }
 
-/** One note in words, naming the remote, the item and the property it is about. */
-export function describeNote(note: PlanNoteResponseModel, remoteName: string): string {
+/**
+ * One note in words, naming the remote, the item and the property it is about. A note on a media row (kind Media) speaks
+ * of folders where a document's speaks of parents.
+ */
+export function describeNote(note: PlanNoteResponseModel, remoteName: string, kind = 'Document'): string {
+  const media = kind === 'Media';
   const item = note.name ? `"${note.name}"` : 'an item';
   const property = note.propertyName ?? note.propertyAlias;
   const inProperty = property ? `"${property}"${note.culture ? ` (${note.culture})` : ''}` : 'Its content';
@@ -103,7 +107,7 @@ export function describeNote(note: PlanNoteResponseModel, remoteName: string): s
     case 'ParentMissingOnTarget':
       return `Its parent ${item} isn't on ${remoteName}.`;
     case 'ParentBlocked':
-      return `Its parent ${item} can't be copied.`;
+      return `Its ${media ? 'folder' : 'parent'} ${item} can't be copied.`;
     case 'MissingReference':
       return `${inProperty} links to ${item}, which isn't on ${remoteName}.`;
     case 'MemberReference':
@@ -114,6 +118,8 @@ export function describeNote(note: PlanNoteResponseModel, remoteName: string): s
       return `It is in the recycle bin on ${remoteName}.`;
     case 'DocumentTypeDiffers':
       return `It has another document type on ${remoteName}${note.name ? ` (${item})` : ''}.`;
+    case 'MediaTypeDiffers':
+      return `It has another media type on ${remoteName}${note.name ? ` (${item})` : ''}.`;
     case 'NoBaseline':
       return `It differs on ${remoteName}, and there is no earlier copy from here to tell who changed it.`;
     case 'ChangedSinceLastCopy':
@@ -129,7 +135,9 @@ export function describeNote(note: PlanNoteResponseModel, remoteName: string): s
         ? `It takes its place here among its siblings on ${remoteName}: right after ${item}.`
         : `It takes its place here among its siblings on ${remoteName}: first.`;
     case 'UnderAnotherParentOnTarget':
-      return `It lives under ${item} on ${remoteName}: updated there, not moved.`;
+      return media
+        ? `It is in ${note.name ? item : 'another folder'} on ${remoteName}: updated there, not moved.`
+        : `It lives under ${item} on ${remoteName}: updated there, not moved.`;
     case 'MediaMissingHere':
       return `${inProperty} uses a media item that doesn't exist here either: the reference is copied as it is.`;
     case 'NotOnTarget':

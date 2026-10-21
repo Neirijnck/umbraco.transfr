@@ -1,8 +1,8 @@
 ﻿namespace Neirijnck.Transfr.Core.Tree;
 
 /// <summary>
-/// One child node in a level of a content tree, on one side. SortIndex is its position among its siblings;
-/// DocumentTypeKey and DocumentTypeIcon its document type on that side, when known.
+/// One child node in a level of a content or media tree, on one side. SortIndex is its position among its siblings;
+/// DocumentTypeKey and DocumentTypeIcon its document type (a media item's media type) on that side, when known.
 /// </summary>
 public sealed record TreeNode(
     Guid Key,

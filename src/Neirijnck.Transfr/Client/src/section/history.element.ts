@@ -108,7 +108,13 @@ export class TransfrHistoryElement extends UmbLitElement {
 
     const remote = this._remotes?.find((candidate) => candidate.alias === alias);
     umbOpenModal(this, TRANSFR_NODE_DIFF_MODAL, {
-      data: { alias, remoteName: remote?.name ?? alias, key: document.key, name: document.name },
+      data: {
+        alias,
+        remoteName: remote?.name ?? alias,
+        key: document.key,
+        name: document.name,
+        kind: document.kind === 'Media' ? 'Media' : 'Document',
+      },
     }).catch(() => undefined);
   }
 
@@ -190,7 +196,7 @@ export class TransfrHistoryElement extends UmbLitElement {
             (document) => document.key,
             (document) => html`
               <li>
-                <umb-icon name="icon-document"></umb-icon>
+                <umb-icon name=${document.kind === 'Media' ? 'icon-picture' : 'icon-document'}></umb-icon>
                 ${
                   document.name
                     ? html`<button

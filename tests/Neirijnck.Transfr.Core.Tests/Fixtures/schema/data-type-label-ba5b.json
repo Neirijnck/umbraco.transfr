@@ -1,0 +1,1 @@
+{"id":"ba5bdbe6-ab3e-46a8-82b3-2c45f10bc47f","isDeletable":true,"canIgnoreStartNodes":true,"name":"Label (bytes)","editorAlias":"Umbraco.Label","editorUiAlias":"Umb.PropertyEditorUi.Label","values":[{"alias":"umbracoDataValueType","value":"BIGINT"},{"alias":"labelTemplate","value":"{=value | bytes}"}]}

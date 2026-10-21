@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { TreeRowResponseModel } from '../api/index.js';
 import {
+  EMPTY_BATCH,
   addToSelection,
+  batchFromRequest,
+  batchToRequest,
   coverForChildren,
-  describeSelection,
+  describeBatch,
   fromRequest,
+  isEmptyBatch,
   isWhole,
   loadBatch,
   saveBatch,
@@ -14,7 +18,7 @@ import {
   toggleSelected,
   whyNotSelectable,
 } from './selection.js';
-import type { NodePick } from './selection.js';
+import type { Batch, NodePick } from './selection.js';
 
 const row = (status: string): TreeRowResponseModel => ({
   key: 'r',
@@ -26,6 +30,11 @@ const row = (status: string): TreeRowResponseModel => ({
   content: null,
   orderDiffers: false,
   schemaProblems: null,
+});
+
+const batch = (documents: Array<[string, NodePick]>, media: Array<[string, boolean]> = []): Batch => ({
+  documents: new Map(documents),
+  media: new Map(media),
 });
 
 describe('selection', () => {
@@ -106,25 +115,77 @@ describe('selection', () => {
   });
 
   it.each([
-    [new Map([['a', false]]), '1 node selected'],
-    [new Map([['a', true]]), '1 node selected, 1 with everything below it'],
+    [batch([['a', false]]), '1 node selected'],
+    [batch([['a', true]]), '1 node selected, 1 with everything below it'],
     [
-      new Map<string, NodePick>([
+      batch([
         ['a', true],
         ['b', [title]],
       ]),
       '2 nodes selected, 1 with everything below it, 1 with only some fields',
     ],
     [
-      new Map([
+      batch([
         ['a', true],
         ['b', true],
         ['c', false],
       ]),
       '3 nodes selected, 2 with everything below them',
     ],
+    [batch([], [['m', false]]), '1 media item selected'],
+    [
+      batch(
+        [['a', false]],
+        [
+          ['m', true],
+          ['n', false],
+        ],
+      ),
+      '1 node and 2 media items selected, 1 with everything below it',
+    ],
   ])('describes %o', (selection, expected) => {
-    expect(describeSelection(selection)).toBe(expected);
+    expect(describeBatch(selection)).toBe(expected);
+  });
+});
+
+describe('batch', () => {
+  it('sends the nodes, then the media items with their kind, and reads them back apart', () => {
+    const picked = batch(
+      [['a', true]],
+      [
+        ['m', true],
+        ['n', false],
+      ],
+    );
+    expect(batchToRequest(picked)).toEqual([
+      { key: 'a', includeDescendants: true },
+      { key: 'm', includeDescendants: true, kind: 'Media' },
+      { key: 'n', includeDescendants: false, kind: 'Media' },
+    ]);
+    const back = batchFromRequest(batchToRequest(picked));
+    expect([...back.documents]).toEqual([['a', true]]);
+    expect([...back.media]).toEqual([
+      ['m', true],
+      ['n', false],
+    ]);
+  });
+
+  it('reads an entry without a kind, or kind Document, as a node', () => {
+    const back = batchFromRequest([
+      { key: 'a', includeDescendants: false },
+      { key: 'b', includeDescendants: true, kind: 'Document' },
+    ]);
+    expect([...back.documents]).toEqual([
+      ['a', false],
+      ['b', true],
+    ]);
+    expect(back.media.size).toBe(0);
+  });
+
+  it('is empty only with no nodes and no media', () => {
+    expect(isEmptyBatch(EMPTY_BATCH)).toBe(true);
+    expect(isEmptyBatch(batch([], [['m', false]]))).toBe(false);
+    expect(isEmptyBatch(batch([['a', false]]))).toBe(false);
   });
 });
 
@@ -139,30 +200,34 @@ describe('batch storage', () => {
     };
   };
 
-  it('keeps the batch per remote and gives it back in the order picked', () => {
+  it('keeps the batch per remote, nodes and media, and gives it back in the order picked', () => {
     const storage = memory();
     saveBatch(
       storage,
       'b',
-      new Map([
-        ['x', true],
-        ['y', false],
-      ]),
+      batch(
+        [
+          ['x', true],
+          ['y', false],
+        ],
+        [['m', true]],
+      ),
     );
-    saveBatch(storage, 'c', new Map([['z', false]]));
+    saveBatch(storage, 'c', batch([['z', false]]));
 
-    expect([...loadBatch(storage, 'b')]).toEqual([
+    expect([...loadBatch(storage, 'b').documents]).toEqual([
       ['x', true],
       ['y', false],
     ]);
-    expect([...loadBatch(storage, 'c')]).toEqual([['z', false]]);
+    expect([...loadBatch(storage, 'b').media]).toEqual([['m', true]]);
+    expect([...loadBatch(storage, 'c').documents]).toEqual([['z', false]]);
   });
 
   it('keeps picked fields, and drops a stored pick whose fields it can not read', () => {
     const storage = memory();
     const title = { kind: 'Value', alias: 'title', culture: null, segment: null };
-    saveBatch(storage, 'b', new Map<string, NodePick>([['x', [title]]]));
-    expect([...loadBatch(storage, 'b')]).toEqual([['x', [title]]]);
+    saveBatch(storage, 'b', batch([['x', [title]]]));
+    expect([...loadBatch(storage, 'b').documents]).toEqual([['x', [title]]]);
 
     storage.items.set(
       'transfr.batch.b',
@@ -170,15 +235,18 @@ describe('batch storage', () => {
         { key: 'x', includeDescendants: false, fields: [{ alias: 'title' }] },
         { key: 'y', includeDescendants: false, fields: 'title' },
         { key: 'z', includeDescendants: false, fields: null },
+        { key: 'f', includeDescendants: false, kind: 'Folder' },
+        { key: 'g', includeDescendants: false, kind: 'Media', fields: [title] },
       ]),
     );
-    expect([...loadBatch(storage, 'b')]).toEqual([['z', false]]);
+    expect([...loadBatch(storage, 'b').documents]).toEqual([['z', false]]);
+    expect(loadBatch(storage, 'b').media.size).toBe(0);
   });
 
   it('removes an empty batch', () => {
     const storage = memory();
-    saveBatch(storage, 'b', new Map([['x', true]]));
-    saveBatch(storage, 'b', new Map());
+    saveBatch(storage, 'b', batch([], [['m', true]]));
+    saveBatch(storage, 'b', EMPTY_BATCH);
 
     expect(storage.items.size).toBe(0);
   });
@@ -197,11 +265,11 @@ describe('batch storage', () => {
       removeItem: () => undefined,
     };
 
-    expect(loadBatch(storage, 'b').size).toBe(0);
-    expect([...loadBatch(storage, 'c')]).toEqual([['y', true]]);
-    expect(loadBatch(undefined, 'b').size).toBe(0);
-    expect(loadBatch(broken, 'b').size).toBe(0);
-    expect(() => saveBatch(broken, 'b', new Map([['x', false]]))).not.toThrow();
+    expect(isEmptyBatch(loadBatch(storage, 'b'))).toBe(true);
+    expect([...loadBatch(storage, 'c').documents]).toEqual([['y', true]]);
+    expect(isEmptyBatch(loadBatch(undefined, 'b'))).toBe(true);
+    expect(isEmptyBatch(loadBatch(broken, 'b'))).toBe(true);
+    expect(() => saveBatch(broken, 'b', batch([['x', false]]))).not.toThrow();
   });
 });
 
@@ -211,7 +279,7 @@ describe('whyNotSelectable', () => {
   });
 
   it('refuses a node that is only on the remote or lives elsewhere here', () => {
-    expect(whyNotSelectable(row('OnlyRemote'), undefined, false)).toBe('This node is not here.');
+    expect(whyNotSelectable(row('OnlyRemote'), undefined, false)).toBe('It is not here.');
     expect(whyNotSelectable(row('ElsewhereLocally'), undefined, false)).toMatch(/select it there/);
   });
 

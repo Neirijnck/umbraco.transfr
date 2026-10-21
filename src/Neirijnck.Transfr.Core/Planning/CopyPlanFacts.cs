@@ -37,12 +37,26 @@ public sealed class CopyPlanFacts
     /// <summary>The schema check of each source's document type, by document type key.</summary>
     public required IReadOnlyDictionary<Guid, SchemaCheck> Schema { get; init; }
 
-    /// <summary>Referenced media items here and their ancestors, by key.</summary>
+    /// <summary>
+    /// Media items picked for the copy themselves (each picked folder's items included when picked with everything
+    /// below it), parents before their children: they are planned whether or not a written document uses them.
+    /// </summary>
+    public required IReadOnlyList<Guid> PickedMedia { get; init; }
+
+    /// <summary>Picked and referenced media items here and their ancestors, by key.</summary>
     public required IReadOnlyDictionary<Guid, LocalMediaItem> LocalMedia { get; init; }
 
-    /// <summary>Media items on the target among the referenced ones and their ancestors.</summary>
-    public required IReadOnlySet<Guid> MediaOnTarget { get; init; }
+    /// <summary>
+    /// The target's copies of <see cref="LocalMedia"/> (trashed ones included), by key; no entry = not on the target.
+    /// </summary>
+    public required IReadOnlyDictionary<Guid, TargetMediaItem> TargetMedia { get; init; }
 
-    /// <summary>The target's last update time we recorded after our last copy of a document, by key.</summary>
+    /// <summary>The schema check of each media type in <see cref="LocalMedia"/>, by media type key.</summary>
+    public required IReadOnlyDictionary<Guid, SchemaCheck> MediaSchema { get; init; }
+
+    /// <summary>
+    /// The target's last update time we recorded after our last copy of a document or media item, by key (keys are
+    /// unique across documents and media).
+    /// </summary>
     public required IReadOnlyDictionary<Guid, DateTimeOffset> Baseline { get; init; }
 }

@@ -44,6 +44,7 @@ export type DocumentDiffResponseModel = {
     documentTypeName: null | string;
     fields: Array<FieldDiffResponseModel>;
     properties: Array<PropertyDiffResponseModel>;
+    files?: null | Array<MediaFileDiffResponseModel>;
 };
 
 export type DryRunRowRequestModel = {
@@ -79,6 +80,15 @@ export type FieldDiffResponseModel = {
 export type LastCopyResponseModel = {
     by: null | string;
     at: string;
+};
+
+export type MediaFileDiffResponseModel = {
+    alias: string;
+    label: string;
+    culture: null | string;
+    segment: null | string;
+    localUrl: null | string;
+    remoteUrl: null | string;
 };
 
 export type PlanDriftResponseModel = {
@@ -121,6 +131,7 @@ export type PlanSelectionRequestModel = {
     key: string;
     includeDescendants: boolean;
     fields?: null | Array<FieldChoiceRequestModel>;
+    kind?: null | string;
 };
 
 export type ProblemDetails = {
@@ -201,6 +212,7 @@ export type TransferHistoryDocumentResponseModel = {
     key: string;
     name: null | string;
     outcome: string;
+    kind: string;
 };
 
 export type TransferHistoryItemResponseModel = {
@@ -454,6 +466,128 @@ export type GetHistoryResponses = {
 };
 
 export type GetHistoryResponse = GetHistoryResponses[keyof GetHistoryResponses];
+
+export type DiffMediaData = {
+    body?: never;
+    path: {
+        alias: string;
+        key: string;
+    };
+    query?: never;
+    url: '/umbraco/management/api/v1/transfr/remotes/{alias}/media/{key}/diff';
+};
+
+export type DiffMediaErrors = {
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+    /**
+     * The authenticated user does not have access to this resource
+     */
+    403: unknown;
+    /**
+     * Not Found
+     */
+    404: ProblemDetails;
+    /**
+     * Bad Gateway
+     */
+    502: ProblemDetails;
+};
+
+export type DiffMediaError = DiffMediaErrors[keyof DiffMediaErrors];
+
+export type DiffMediaResponses = {
+    /**
+     * OK
+     */
+    200: DocumentDiffResponseModel;
+};
+
+export type DiffMediaResponse = DiffMediaResponses[keyof DiffMediaResponses];
+
+export type CompareMediaSubtreeData = {
+    body?: never;
+    path: {
+        alias: string;
+    };
+    query?: {
+        parentKey?: string;
+    };
+    url: '/umbraco/management/api/v1/transfr/remotes/{alias}/media/subtree';
+};
+
+export type CompareMediaSubtreeErrors = {
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+    /**
+     * The authenticated user does not have access to this resource
+     */
+    403: unknown;
+    /**
+     * Not Found
+     */
+    404: unknown;
+    /**
+     * Bad Gateway
+     */
+    502: ProblemDetails;
+};
+
+export type CompareMediaSubtreeError = CompareMediaSubtreeErrors[keyof CompareMediaSubtreeErrors];
+
+export type CompareMediaSubtreeResponses = {
+    /**
+     * OK
+     */
+    200: SubtreeResponseModel;
+};
+
+export type CompareMediaSubtreeResponse = CompareMediaSubtreeResponses[keyof CompareMediaSubtreeResponses];
+
+export type CompareMediaTreeLevelData = {
+    body?: never;
+    path: {
+        alias: string;
+    };
+    query?: {
+        parentKey?: string;
+    };
+    url: '/umbraco/management/api/v1/transfr/remotes/{alias}/media/tree';
+};
+
+export type CompareMediaTreeLevelErrors = {
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+    /**
+     * The authenticated user does not have access to this resource
+     */
+    403: unknown;
+    /**
+     * Not Found
+     */
+    404: unknown;
+    /**
+     * Bad Gateway
+     */
+    502: ProblemDetails;
+};
+
+export type CompareMediaTreeLevelError = CompareMediaTreeLevelErrors[keyof CompareMediaTreeLevelErrors];
+
+export type CompareMediaTreeLevelResponses = {
+    /**
+     * OK
+     */
+    200: TreeLevelResponseModel;
+};
+
+export type CompareMediaTreeLevelResponse = CompareMediaTreeLevelResponses[keyof CompareMediaTreeLevelResponses];
 
 export type PlanCopyData = {
     body: CopyPlanRequestModel;

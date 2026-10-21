@@ -6,13 +6,13 @@ namespace Neirijnck.Transfr.Compare;
 
 /// <summary>
 /// Turns a diff into its response, with names where this environment's schema has them: a property's label, a block's
-/// element type, the document type and template by name. Anything unknown falls back to its alias or id.
+/// element type, the document type (or media type) and template by name. Anything unknown falls back to its alias or id.
 /// </summary>
 internal static class DocumentDiffResponses
 {
-    public static DocumentDiffResponseModel From(DocumentDiff diff, SchemaNames names)
+    public static DocumentDiffResponseModel From(DocumentDiff diff, SchemaNames names, IReadOnlyList<MediaFileDiff>? files = null)
     {
-        var documentTypeField = diff.Fields.First(field => field.Kind == ContentDifferenceKind.DocumentType);
+        var documentTypeField = diff.Fields.First(field => field.Kind is ContentDifferenceKind.DocumentType or ContentDifferenceKind.MediaType);
         var documentType = TypeOf(documentTypeField.Local ?? documentTypeField.Remote, names);
 
         var fields = diff.Fields
@@ -25,13 +25,24 @@ internal static class DocumentDiffResponses
                 field.Differs))
             .ToList();
 
-        return new DocumentDiffResponseModel(diff.IsIdentical, documentType?.Name, fields, Properties(diff.Properties, documentType, names));
+        return new DocumentDiffResponseModel(
+            diff.IsIdentical,
+            documentType?.Name,
+            fields,
+            Properties(diff.Properties, documentType, names),
+            files?.Select(file => new MediaFileDiffResponseModel(
+                file.Alias,
+                documentType?.PropertyLabels.GetValueOrDefault(file.Alias) ?? file.Alias,
+                file.Culture,
+                file.Segment,
+                file.LocalUrl,
+                file.RemoteUrl)).ToList());
     }
 
     private static string? Display(ContentDifferenceKind kind, string? id, SchemaNames names)
         => kind switch
         {
-            ContentDifferenceKind.DocumentType => TypeOf(id, names)?.Name ?? id,
+            ContentDifferenceKind.DocumentType or ContentDifferenceKind.MediaType => TypeOf(id, names)?.Name ?? id,
             ContentDifferenceKind.Template => Guid.TryParse(id, out var key) && names.Templates.TryGetValue(key, out var name) ? name : id,
             _ => id,
         };

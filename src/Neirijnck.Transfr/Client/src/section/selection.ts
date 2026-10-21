@@ -1,4 +1,5 @@
 import type { FieldChoiceRequestModel, PlanSelectionRequestModel, TreeRowResponseModel } from '../api/index.js';
+import { describeItems } from './item-count.js';
 import type { RowBlock } from './schema-view.js';
 
 /**
@@ -78,45 +79,81 @@ export function fromRequest(selection: ReadonlyArray<PlanSelectionRequestModel>)
   );
 }
 
+/**
+ * What is picked for a copy to one remote: nodes (in the Content view) and media items (in the Media view, picked
+ * whole: with or without everything below a folder), each in the order picked.
+ */
+export type Batch = { readonly documents: Selection; readonly media: Selection };
+
+export const EMPTY_BATCH: Batch = { documents: new Map(), media: new Map() };
+
+export function isEmptyBatch(batch: Batch): boolean {
+  return batch.documents.size === 0 && batch.media.size === 0;
+}
+
+/** The batch as the plan and the transfer take it: the nodes, then the media items (kind Media). */
+export function batchToRequest(batch: Batch): Array<PlanSelectionRequestModel> {
+  return [
+    ...toRequest(batch.documents),
+    ...[...batch.media].map(([key, pick]) => ({ key, includeDescendants: pick === true, kind: 'Media' })),
+  ];
+}
+
+/** A batch from the request shape; an entry without a kind is a node (stored before media could be picked). */
+export function batchFromRequest(selection: ReadonlyArray<PlanSelectionRequestModel>): Batch {
+  return {
+    documents: fromRequest(selection.filter((choice) => choice.kind !== 'Media')),
+    media: new Map(
+      selection.filter((choice) => choice.kind === 'Media').map((choice) => [choice.key, choice.includeDescendants]),
+    ),
+  };
+}
+
 /** The part of the Web Storage API the batch needs (sessionStorage in the browser, a fake in tests). */
 export type BatchStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 const batchKey = (alias: string) => `transfr.batch.${alias}`;
 
 /**
- * The batch picked for a remote in this browser tab: one per tab and per remote. Storage that is missing,
- * full or blocked, or holds something else, gives an empty batch: a lost batch is picked again, never a crash.
+ * The batch picked for a remote in this browser tab: one per tab and per remote, nodes and media together. Storage
+ * that is missing, full or blocked, or holds something else, gives an empty batch: a lost batch is picked again, never
+ * a crash. An entry it can't read (another kind, unreadable fields) is left out.
  */
-export function loadBatch(storage: BatchStorage | undefined, alias: string): Selection {
+export function loadBatch(storage: BatchStorage | undefined, alias: string): Batch {
   try {
     const parsed: unknown = JSON.parse(storage?.getItem(batchKey(alias)) ?? '[]');
     if (!Array.isArray(parsed)) {
-      return new Map();
+      return EMPTY_BATCH;
     }
-    return fromRequest(
+    return batchFromRequest(
       parsed.filter(
         (choice): choice is PlanSelectionRequestModel =>
           typeof choice?.key === 'string' &&
           typeof choice?.includeDescendants === 'boolean' &&
+          (choice.kind === undefined ||
+            choice.kind === null ||
+            choice.kind === 'Document' ||
+            choice.kind === 'Media') &&
           (choice.fields === undefined ||
             choice.fields === null ||
-            (Array.isArray(choice.fields) &&
+            (choice.kind !== 'Media' &&
+              Array.isArray(choice.fields) &&
               choice.fields.every((field: unknown) => typeof (field as { kind?: unknown })?.kind === 'string'))),
       ),
     );
   } catch (error) {
     console.warn('[Transfr] The batch in session storage could not be read', error);
-    return new Map();
+    return EMPTY_BATCH;
   }
 }
 
 /** Keeps the batch for a remote in this browser tab; an empty batch is removed. */
-export function saveBatch(storage: BatchStorage | undefined, alias: string, selection: Selection): void {
+export function saveBatch(storage: BatchStorage | undefined, alias: string, batch: Batch): void {
   try {
-    if (selection.size === 0) {
+    if (isEmptyBatch(batch)) {
       storage?.removeItem(batchKey(alias));
     } else {
-      storage?.setItem(batchKey(alias), JSON.stringify(toRequest(selection)));
+      storage?.setItem(batchKey(alias), JSON.stringify(batchToRequest(batch)));
     }
   } catch (error) {
     console.warn('[Transfr] The batch could not be kept in session storage', error);
@@ -136,12 +173,12 @@ export function coverForChildren(
   return cover ?? (selection.get(key) === true ? name : undefined);
 }
 
-/** E.g. "3 nodes selected, 1 with everything below it, 1 with only some fields". */
-export function describeSelection(selection: Selection): string {
-  const count = selection.size;
-  const below = [...selection.values()].filter((pick) => pick === true).length;
-  const fields = [...selection.values()].filter((pick) => !isWhole(pick)).length;
-  const parts = [`${count} ${count === 1 ? 'node' : 'nodes'} selected`];
+/** E.g. "3 nodes and 1 media item selected, 1 with everything below it, 1 with only some fields". */
+export function describeBatch(batch: Batch): string {
+  const picks = [...batch.documents.values(), ...batch.media.values()];
+  const below = picks.filter((pick) => pick === true).length;
+  const fields = picks.filter((pick) => !isWhole(pick)).length;
+  const parts = [`${describeItems(batch.documents.size, batch.media.size)} selected`];
   if (below > 0) {
     parts.push(`${below} with everything below ${below === 1 ? 'it' : 'them'}`);
   }
@@ -164,10 +201,10 @@ export function whyNotSelectable(
     return 'The remote was installed separately: nothing can be copied to it.';
   }
   if (row.status === 'OnlyRemote') {
-    return 'This node is not here.';
+    return 'It is not here.';
   }
   if (row.status === 'ElsewhereLocally') {
-    return 'Here this node lives under another parent: select it there.';
+    return 'Here it lives under another parent: select it there.';
   }
   if (block) {
     return block.reason;

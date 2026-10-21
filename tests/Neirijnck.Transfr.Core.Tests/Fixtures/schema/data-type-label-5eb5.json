@@ -1,0 +1,1 @@
+{"id":"5eb57825-e15e-4fc7-8e37-fca65cdafbde","isDeletable":true,"canIgnoreStartNodes":true,"name":"Label (pixels)","editorAlias":"Umbraco.Label","editorUiAlias":"Umb.PropertyEditorUi.Label","values":[{"alias":"umbracoDataValueType","value":"INT"},{"alias":"labelTemplate","value":"{=value}px"}]}

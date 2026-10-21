@@ -26,6 +26,7 @@ public sealed class RemoteSchemaReader
         {
             SchemaItemKind.DocumentType => $"{RemoteRequestPolicy.ApiBase}/document-type/{key:D}",
             SchemaItemKind.DataType => $"{RemoteRequestPolicy.ApiBase}/data-type/{key:D}",
+            SchemaItemKind.MediaType => $"{RemoteRequestPolicy.ApiBase}/media-type/{key:D}",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
         };
 

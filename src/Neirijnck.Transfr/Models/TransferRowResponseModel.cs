@@ -1,9 +1,9 @@
 ﻿namespace Neirijnck.Transfr.Models;
 
 /// <summary>
-/// One row of a transfer report. Result is Written, Unchanged, Skipped (a conflict not overwritten), Blocked, Failed,
-/// NotRun (after a failure) or MediaLater. TargetState is the publish state on the remote afterwards for a row that
-/// wrote or failed ("absent" when it isn't there).
+/// One row of a transfer report. Result is Written, Unchanged, Skipped (a conflict not overwritten), Blocked, Failed or
+/// NotRun (after a failure). TargetState is the publish state on the remote afterwards for a document that wrote or
+/// failed, "Saved" for such a media item ("absent" when it isn't there).
 /// </summary>
 public sealed record TransferRowResponseModel(
     string Kind,

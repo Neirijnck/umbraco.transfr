@@ -24,10 +24,10 @@ import {
 } from './plan-view.js';
 import { problemMessage } from './problem.js';
 import { describeSchemaProblem, describeSeparateInstall } from './schema-view.js';
-import { addToSelection, describeSelection, fromRequest, toRequest } from './selection.js';
-import type { Selection } from './selection.js';
+import { EMPTY_BATCH, addToSelection, batchFromRequest, batchToRequest, describeBatch } from './selection.js';
+import type { Batch } from './selection.js';
 import { formatDuration } from './subtree.js';
-import { countWrites, describeDrift, describeTransfer, resultLook, toDryRun } from './transfer-view.js';
+import { countWrites, describeDrift, describeTransfer, describeWrites, resultLook, toDryRun } from './transfer-view.js';
 
 /**
  * The dry run of copying the selected nodes to a remote: what would happen to each node, and why. It reads both sides
@@ -42,7 +42,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
   TransfrCopyPlanModalValue
 > {
   @state()
-  private _selection: Selection = new Map();
+  private _batch: Batch = EMPTY_BATCH;
 
   @state()
   private _plan?: CopyPlanResponseModel;
@@ -71,7 +71,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
 
   override connectedCallback() {
     super.connectedCallback();
-    this._selection = fromRequest(this.data?.selection ?? []);
+    this._batch = batchFromRequest(this.data?.selection ?? []);
     void this.#load();
   }
 
@@ -88,7 +88,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
     const started = performance.now();
     const { data, error } = await tryExecute(
       this,
-      TransfrService.planCopy({ path: { alias }, body: { selection: toRequest(this._selection) } }),
+      TransfrService.planCopy({ path: { alias }, body: { selection: batchToRequest(this._batch) } }),
       { disableNotifications: true },
     );
     this._loading = false;
@@ -103,7 +103,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
   }
 
   #add(key: string) {
-    this._selection = addToSelection(this._selection, [key]);
+    this._batch = { ...this._batch, documents: addToSelection(this._batch.documents, [key]) };
     void this.#load();
   }
 
@@ -131,7 +131,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
       this,
       TransfrService.transfer({
         path: { alias },
-        body: { selection: toRequest(this._selection), dryRun: toDryRun(plan.rows), overwrite: [...this._overwrite] },
+        body: { selection: batchToRequest(this._batch), dryRun: toDryRun(plan.rows), overwrite: [...this._overwrite] },
       }),
       { disableNotifications: true },
     );
@@ -146,7 +146,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
   }
 
   #close() {
-    this.updateValue({ selection: this._transfer?.status === 'Completed' ? [] : toRequest(this._selection) });
+    this.updateValue({ selection: this._transfer?.status === 'Completed' ? [] : batchToRequest(this._batch) });
     this._submitModal();
   }
 
@@ -162,7 +162,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
             ? this.#renderReport(this._transfer, remote)
             : html`<div class="intro">
                   <umb-icon name="icon-info"></umb-icon>
-                  <span>A dry run reads both sides and changes nothing. ${describeSelection(this._selection)}.</span>
+                  <span>A dry run reads both sides and changes nothing. ${describeBatch(this._batch)}.</span>
                 </div>
                 ${this.#renderBody(remote)}`
         }
@@ -175,7 +175,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
               : html`<uui-button
                   look="primary"
                   color="positive"
-                  label=${`Transfer ${writes} ${writes === 1 ? 'node' : 'nodes'} to ${remote}`}
+                  label=${`Transfer ${plan ? describeWrites(plan.rows, this._overwrite) : '0 nodes'} to ${remote}`}
                   .state=${this._transferring ? 'waiting' : undefined}
                   ?disabled=${writes === 0 || refused || this._loading || this._transferring || !plan}
                   @click=${() => this.#transfer()}
@@ -324,9 +324,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
         <div class="head">
           <umb-icon class="kind" name=${row.kind === 'Media' ? 'icon-picture' : 'icon-document'}></umb-icon>
           <strong class="name">${row.name}</strong>
-          <small
-            >${row.kind === 'Media' ? 'Media, planned along: copying media comes later' : (row.documentTypeName ?? '')}</small
-          >
+          <small>${row.documentTypeName ?? (row.kind === 'Media' ? 'Media' : '')}</small>
           <uui-tag color=${look.color} look=${look.look}
             ><span class="chip"><umb-icon name=${look.icon}></umb-icon>${look.label}</span></uui-tag
           >
@@ -337,7 +335,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
         ${row.lastCopied ? html`<div class="line">${describeLastCopy(row.lastCopied, remote)}</div>` : nothing}
         ${publish ? html`<div class="line">${publish}</div>` : nothing}
         ${
-          row.kind === 'Document' && row.outcome === 'Conflict'
+          row.outcome === 'Conflict'
             ? html`<label class="line overwrite">
                 <input
                   type="checkbox"
@@ -361,12 +359,12 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
   }
 
   #renderNote(note: PlanNoteResponseModel, row: PlanRowResponseModel, remote: string) {
-    const canAdd = note.canAddToSelection && note.key && !this._selection.has(note.key);
+    const canAdd = note.canAddToSelection && note.key && !this._batch.documents.has(note.key);
     return html`
       <li class=${note.blocks ? 'blocks' : ''}>
         <umb-icon name=${note.blocks ? 'icon-block' : 'icon-info'}></umb-icon>
         <span>
-          ${describeNote(note, remote)}
+          ${describeNote(note, remote, row.kind)}
           ${
             note.kind === 'SchemaMismatch'
               ? html`<ul class="details">

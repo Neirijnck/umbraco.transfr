@@ -19,13 +19,21 @@ public sealed class RemoteRequestPolicyTests
         "GET " + Api + "/document-type/{id}",
         "GET " + Api + "/data-type/{id}",
         "GET " + Api + "/item/document-type/search",
+        "GET " + Api + "/tree/media/root",
+        "GET " + Api + "/tree/media/children",
+        "GET " + Api + "/media/{id}",
+        "GET " + Api + "/media-type/{id}",
         "GET " + Api + "/document/{id}/audit-log",
+        "GET " + Api + "/media/{id}/audit-log",
         "GET " + Api + "/item/user",
         "POST " + Api + "/document",
         "POST " + Api + "/document/create-and-publish",
         "PUT " + Api + "/document/{id}",
         "PUT " + Api + "/document/{id}/update-and-publish",
         "PUT " + Api + "/document/sort",
+        "POST " + Api + "/temporary-file",
+        "POST " + Api + "/media",
+        "PUT " + Api + "/media/{id}",
     ];
 
     private static readonly string[] AllowedMethods = ["GET", "POST", "PUT"];
@@ -76,6 +84,13 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("GET", Api + "/document-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/data-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/item/document-type/search?query=Home")]
+    [InlineData("GET", Api + "/media/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("GET", Api + "/tree/media/root?skip=0&take=100")]
+    [InlineData("GET", Api + "/tree/media/children?parentId=3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b&skip=0&take=100")]
+    [InlineData("GET", Api + "/media-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("POST", Api + "/temporary-file")]
+    [InlineData("POST", Api + "/media")]
+    [InlineData("PUT", Api + "/media/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("POST", Api + "/document")]
     [InlineData("POST", Api + "/document/create-and-publish")]
     [InlineData("PUT", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
@@ -83,6 +98,7 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("PUT", Api + "/document/sort")]
     [InlineData("GET", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/audit-log?orderDirection=Descending&skip=0&take=20")]
     [InlineData("GET", Api + "/item/user?id=3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("GET", Api + "/media/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/audit-log?orderDirection=Descending&skip=0&take=20")]
     public void IsAllowed_AcceptsListedRequests(string method, string path)
     {
         Assert.True(RemoteRequestPolicy.IsAllowed(method, path));
@@ -95,7 +111,6 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("GET", Api + "/security/back-office/token")]
     [InlineData("GET", Api + "/tree/document/root/extra")]
     [InlineData("GET", Api + "/tree/document")]
-    [InlineData("GET", Api + "/tree/media/root")]
     [InlineData("GET", Api + "/tree/document/../../user")]
     [InlineData("GET", Api + "/tree/document/%2E%2E/root")]
     [InlineData("GET", "/umbraco/management/api/v2/tree/document/root")]
@@ -127,6 +142,20 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("DELETE", Api + "/data-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("PUT", Api + "/data-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/tree/document-type/root")]
+    [InlineData("DELETE", Api + "/media/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("POST", Api + "/media/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("PUT", Api + "/media")]
+    [InlineData("DELETE", Api + "/temporary-file/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("GET", Api + "/temporary-file/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("PUT", Api + "/media/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/move")]
+    [InlineData("PUT", Api + "/media/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/move-to-recycle-bin")]
+    [InlineData("PUT", Api + "/media/sort")]
+    [InlineData("GET", Api + "/media/urls")]
+    [InlineData("GET", Api + "/media/configuration")]
+    [InlineData("GET", Api + "/tree/media-type/root")]
+    [InlineData("GET", Api + "/tree/media/siblings")]
+    [InlineData("GET", Api + "/tree/member/root")]
+    [InlineData("DELETE", Api + "/media-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     public void IsAllowed_RejectsEverythingElse(string method, string path)
     {
         Assert.False(RemoteRequestPolicy.IsAllowed(method, path));
@@ -144,7 +173,7 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("https://other.example.com" + Api + "/tree/document/root")]
     [InlineData("http://localhost:44372" + Api + "/tree/document/root")]
     [InlineData("https://localhost:44373" + Api + "/tree/document/root")]
-    [InlineData("https://localhost:44372" + Api + "/media/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("https://localhost:44372" + Api + "/tree/member/root")]
     [InlineData("https://other.example.com" + Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     public void EnsureAllowed_ThrowsForOtherHostsAndUnlistedPaths(string requestUri)
     {

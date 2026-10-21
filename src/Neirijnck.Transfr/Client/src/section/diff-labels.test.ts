@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BlockDiffResponseModel, FieldDiffResponseModel } from '../api/index.js';
-import { blockStatusLabel, describeState, fieldLabel, fieldValue } from './diff-labels.js';
+import { blockStatusLabel, describeState, fieldLabel, fieldValue, isImageUrl } from './diff-labels.js';
 
 const field = (
   kind: string,
@@ -46,6 +46,7 @@ describe('fieldLabel and fieldValue', () => {
   it('labels a field with its culture', () => {
     expect(fieldLabel(field('State', 'Draft', 'Published', 'nl-BE'))).toBe('Publish state (nl-BE)');
     expect(fieldLabel(field('DocumentType', 'a', 'a'))).toBe('Document type');
+    expect(fieldLabel(field('MediaType', 'a', 'a'))).toBe('Media type');
   });
 
   it('shows states in words and other values as they are', () => {
@@ -70,5 +71,21 @@ describe('blockStatusLabel', () => {
   it('names the side a block is on', () => {
     expect(blockStatusLabel(block('OnlyLocal', 0, null), 'Test site B')).toBe('Only here');
     expect(blockStatusLabel(block('OnlyRemote', null, 0), 'Test site B')).toBe('Only on Test site B');
+  });
+});
+
+describe('isImageUrl', () => {
+  it.each([
+    ['/media/zn1jr2zj/red.png', true],
+    ['https://localhost:44372/media/zn1jr2zj/Red.JPG', true],
+    ['/media/abc/photo.webp?width=200', true],
+    ['/media/abc/logo.svg#icon', true],
+    ['/media/2fhdb0lj/probe.txt', false],
+    ['/media/abc/report.pdf', false],
+    ['/media/folder.png/file', false],
+    ['', false],
+    [null, false],
+  ])('says %s is an image: %s', (url, expected) => {
+    expect(isImageUrl(url)).toBe(expected);
   });
 });

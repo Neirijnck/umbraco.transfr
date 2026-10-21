@@ -1,7 +1,7 @@
 ﻿namespace Neirijnck.Transfr.Core.Content;
 
 /// <summary>
-/// One difference between the two sides of a document.
+/// One difference between the two sides of a document or media item.
 /// </summary>
 /// <param name="Kind">What differs.</param>
 /// <param name="Alias">For a value: the property alias.</param>

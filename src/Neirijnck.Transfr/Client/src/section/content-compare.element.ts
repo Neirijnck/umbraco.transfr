@@ -21,18 +21,20 @@ import { blockOf, describeSeparateInstall, passesBlockOn } from './schema-view.j
 import type { RowBlock } from './schema-view.js';
 import {
   coverForChildren,
-  describeSelection,
-  fromRequest,
+  EMPTY_BATCH,
+  batchFromRequest,
+  batchToRequest,
+  describeBatch,
+  isEmptyBatch,
   isWhole,
   loadBatch,
   saveBatch,
   setFields,
   setIncludeDescendants,
-  toRequest,
   toggleSelected,
   whyNotSelectable,
 } from './selection.js';
-import type { BatchStorage, Selection } from './selection.js';
+import type { Batch, BatchStorage, Selection } from './selection.js';
 import { countSubtree, describeCounts, formatDuration, positionsToReveal } from './subtree.js';
 import type { SubtreeCounts } from './subtree.js';
 import { rowView } from './tree-row-view.js';
@@ -66,10 +68,14 @@ const ROOT = '';
  * Content compare view: this environment's content tree next to a remote's, compared by key one level at a time.
  * Rows line up across both trees; every difference is drawn in the trees themselves (accent, chip, placeholder), so
  * identical nodes stay quiet and differences stand out. A level is read when its parent is expanded and kept until the
- * remote changes or the view is refreshed.
+ * remote changes or the view is refreshed. The Media view is the same tree for media (see media-compare.element.ts).
  */
 @customElement('transfr-content-compare')
 export class TransfrContentCompareElement extends UmbLitElement {
+  // Which tree this view compares. Media are picked whole (a folder with or without everything below it): their diff
+  // panel shows their files, with no fields to pick.
+  protected readonly kind: 'Document' | 'Media' = 'Document';
+
   @state()
   private _remotes?: Array<RemoteResponseModel>;
 
@@ -100,9 +106,14 @@ export class TransfrContentCompareElement extends UmbLitElement {
   @state()
   private _separateInstall: Array<SeparateInstallResponseModel> = [];
 
-  // The nodes picked for a copy to the current remote, by key (a moved node is picked once, in its place here).
+  // What this view picked for a copy to the current remote, by key (a moved node is picked once, in its place here):
+  // the batch's nodes in the Content view, its media items in the Media view.
   @state()
   private _selection: Selection = new Map();
+
+  // The rest of the batch (the other view's picks), kept along so the batch is stored and sent whole.
+  @state()
+  private _others: Selection = new Map();
 
   override connectedCallback() {
     super.connectedCallback();
@@ -121,7 +132,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
     this._expanded = new Set();
     this._subtree = undefined;
     this._separateInstall = [];
-    this._selection = alias ? loadBatch(batchStorage(), alias) : new Map();
+    this.#setBatch(alias ? loadBatch(batchStorage(), alias) : EMPTY_BATCH);
     if (alias) {
       void this.#loadLevel(ROOT);
     }
@@ -131,9 +142,21 @@ export class TransfrContentCompareElement extends UmbLitElement {
   // Untyped PropertyValues: private state isn't part of keyof this.
   override updated(changed: PropertyValues) {
     super.updated(changed);
-    if (changed.has('_selection') && this._alias) {
-      saveBatch(batchStorage(), this._alias, this._selection);
+    if ((changed.has('_selection') || changed.has('_others')) && this._alias) {
+      saveBatch(batchStorage(), this._alias, this.#batch());
     }
+  }
+
+  // One batch per remote for both views: this view's picks and the other view's, as nodes and media.
+  #batch(): Batch {
+    return this.kind === 'Media'
+      ? { documents: this._others, media: this._selection }
+      : { documents: this._selection, media: this._others };
+  }
+
+  #setBatch(batch: Batch) {
+    this._selection = this.kind === 'Media' ? batch.media : batch.documents;
+    this._others = this.kind === 'Media' ? batch.documents : batch.media;
   }
 
   // After a transfer: read every level shown so far again, keeping what is expanded; a completed batch is done.
@@ -143,7 +166,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
     }
 
     if (transfer.status === 'Completed') {
-      this._selection = new Map();
+      this.#setBatch(EMPTY_BATCH);
     }
 
     if (wroteAnything(transfer)) {
@@ -161,12 +184,10 @@ export class TransfrContentCompareElement extends UmbLitElement {
     }
 
     this._levels = { ...this._levels, [parentKey]: { state: 'loading' } };
+    const options = { path: { alias }, query: parentKey === ROOT ? undefined : { parentKey } };
     const { data, error } = await tryExecute(
       this,
-      TransfrService.compareTreeLevel({
-        path: { alias },
-        query: parentKey === ROOT ? undefined : { parentKey },
-      }),
+      this.kind === 'Media' ? TransfrService.compareMediaTreeLevel(options) : TransfrService.compareTreeLevel(options),
       { disableNotifications: true },
     );
 
@@ -217,9 +238,10 @@ export class TransfrContentCompareElement extends UmbLitElement {
 
     this._subtree = { state: 'running', label };
     const started = performance.now();
+    const options = { path: { alias }, query: parentKey === ROOT ? undefined : { parentKey } };
     const { data, error } = await tryExecute(
       this,
-      TransfrService.compareSubtree({ path: { alias }, query: parentKey === ROOT ? undefined : { parentKey } }),
+      this.kind === 'Media' ? TransfrService.compareMediaSubtree(options) : TransfrService.compareSubtree(options),
       { disableNotifications: true },
     );
 
@@ -258,7 +280,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
   // A click anywhere on a row of a node on both sides opens its diff, except on the row's own controls (expand, select,
   // Show, compare below), which do their own thing. The name stays a button so the diff is reachable by keyboard too.
   #rowClick(event: MouseEvent, row: TreeRowResponseModel, block: RowBlock | undefined, coveredBy: string | undefined) {
-    if (!row.content) {
+    if (!this.#opensDiff(row)) {
       return;
     }
 
@@ -270,6 +292,11 @@ export class TransfrContentCompareElement extends UmbLitElement {
     if (!onControl) {
       this.#openDiff(row, block, coveredBy);
     }
+  }
+
+  // A node or media item on both sides has a diff panel.
+  #opensDiff(row: TreeRowResponseModel) {
+    return Boolean(row.content);
   }
 
   // A node found on both sides opens its diff. For a node that can be copied, fields can be picked there; they come
@@ -289,12 +316,15 @@ export class TransfrContentCompareElement extends UmbLitElement {
         remoteName: remote?.name ?? alias,
         key: row.key,
         name: row.local?.name ?? row.remote?.name ?? row.key,
-        batch: canCopy
-          ? {
-              whole: coveredBy !== undefined || isWhole(pick),
-              fields: pick !== undefined && !isWhole(pick) ? [...pick] : [],
-            }
-          : undefined,
+        kind: this.kind,
+        // Media are copied whole: no fields to pick.
+        batch:
+          canCopy && this.kind === 'Document'
+            ? {
+                whole: coveredBy !== undefined || isWhole(pick),
+                fields: pick !== undefined && !isWhole(pick) ? [...pick] : [],
+              }
+            : undefined,
       },
     })
       .then((value) => {
@@ -309,7 +339,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
   // it any other way (Escape) rejects the promise and keeps the selection as it was, which is not an error.
   #openPlan() {
     const alias = this._alias;
-    if (!alias || this._selection.size === 0) {
+    if (!alias || isEmptyBatch(this.#batch())) {
       return;
     }
 
@@ -318,13 +348,13 @@ export class TransfrContentCompareElement extends UmbLitElement {
       data: {
         alias,
         remoteName: remote?.name ?? alias,
-        selection: toRequest(this._selection),
+        selection: batchToRequest(this.#batch()),
         onTransferred: (transfer) => this.#afterTransfer(alias, transfer),
       },
     })
       .then((value) => {
         if (alias === this._alias) {
-          this._selection = fromRequest(value.selection);
+          this.#setBatch(batchFromRequest(value.selection));
         }
       })
       .catch(() => undefined);
@@ -379,7 +409,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
     }
 
     if (this._remotes.length === 0) {
-      return html`<uui-box headline="Content">
+      return html`<uui-box headline=${this.kind === 'Media' ? 'Media' : 'Content'}>
         <p>No remote to compare with. Add or connect one under Remotes.</p>
       </uui-box>`;
     }
@@ -442,16 +472,18 @@ export class TransfrContentCompareElement extends UmbLitElement {
     `;
   }
 
-  // What is picked for a copy, and the way to its dry run. Hidden until something is picked.
+  // What is picked for a copy (in both views), and the way to its dry run. Hidden until something is picked; then it
+  // stays in view while the trees scroll.
   #renderSelectionBar(remoteName: string) {
-    if (this._selection.size === 0) {
+    const batch = this.#batch();
+    if (isEmptyBatch(batch)) {
       return nothing;
     }
 
     return html`<div class="banner selection" role="status" data-test="selection">
       <umb-icon name="icon-checkbox"></umb-icon>
-      <span>${describeSelection(this._selection)}.</span>
-      <uui-button look="secondary" label="Clear selection" @click=${() => (this._selection = new Map())}></uui-button>
+      <span>${describeBatch(batch)}.</span>
+      <uui-button look="secondary" label="Clear selection" @click=${() => this.#setBatch(EMPTY_BATCH)}></uui-button>
       <uui-button
         look="primary"
         label=${`Dry run: copy to ${remoteName}`}
@@ -539,7 +571,11 @@ export class TransfrContentCompareElement extends UmbLitElement {
 
     if (level.rows.length === 0) {
       return html`<div class="message empty" style="--depth: ${depth}">
-        ${parentKey === ROOT ? 'Both content trees are empty.' : 'No child nodes on either side.'}
+        ${
+          parentKey === ROOT
+            ? `Both ${this.kind === 'Media' ? 'media' : 'content'} trees are empty.`
+            : `No ${this.kind === 'Media' ? 'items' : 'child nodes'} on either side.`
+        }
       </div>`;
     }
 
@@ -568,7 +604,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
     const name = row.local?.name ?? row.remote?.name ?? row.key;
     const classes = [
       'row',
-      row.content ? 'opens-diff' : '',
+      this.#opensDiff(row) ? 'opens-diff' : '',
       block ? 'blocked' : '',
       paired ? 'paired' : '',
       this._flash === position ? 'flash' : '',
@@ -643,11 +679,11 @@ export class TransfrContentCompareElement extends UmbLitElement {
             ? html`
                 <umb-icon
                   class="doc"
-                  name=${node.documentTypeIcon ?? 'icon-document'}
-                  title=${node.documentTypeName ?? 'Document type unknown here'}
+                  name=${node.documentTypeIcon ?? (this.kind === 'Media' ? 'icon-picture' : 'icon-document')}
+                  title=${node.documentTypeName ?? `${this.kind === 'Media' ? 'Media' : 'Document'} type unknown here`}
                 ></umb-icon>
                 ${
-                  row.content
+                  this.#opensDiff(row)
                     ? html`<button
                         class="name link"
                         title=${`Show ${node.name} on both sides`}
@@ -734,16 +770,18 @@ export class TransfrContentCompareElement extends UmbLitElement {
     }
 
     const include = this._selection.get(key) === true;
+    // Only a media folder has children.
+    const what = this.kind === 'Media' ? 'folder' : 'node';
     return html`<uui-button
       class="below"
       compact
       look=${include ? 'primary' : 'outline'}
       aria-pressed=${include ? 'true' : 'false'}
       label=${`Include everything below ${name}`}
-      title=${include ? 'Everything below this node comes along. Click for this node only.' : 'Only this node. Click to bring everything below it along.'}
+      title=${include ? `Everything below this ${what} comes along. Click for this ${what} only.` : `Only this ${what}. Click to bring everything below it along.`}
       @click=${() => (this._selection = setIncludeDescendants(this._selection, key, !include))}
       ><span class="chip"
-        ><umb-icon name="icon-tree"></umb-icon>${include ? 'With everything below' : 'This node only'}</span
+        ><umb-icon name="icon-tree"></umb-icon>${include ? 'With everything below' : `This ${what} only`}</span
       ></uui-button
     >`;
   }
@@ -852,7 +890,10 @@ export class TransfrContentCompareElement extends UmbLitElement {
 
   #renderPlaceholder(side: Side, row: TreeRowResponseModel, kind: SideKind, remoteName: string) {
     // A faded icon keeps the placeholder text in line with the node names around it.
-    const icon = html`<umb-icon class="doc faded" name="icon-document"></umb-icon>`;
+    const icon = html`<umb-icon
+      class="doc faded"
+      name=${this.kind === 'Media' ? 'icon-picture' : 'icon-document'}
+    ></umb-icon>`;
     if (kind !== 'elsewhere') {
       return html`${icon}<span class="placeholder">${side === 'local' ? 'Not here' : `Not on ${remoteName}`}</span>`;
     }
@@ -1089,8 +1130,23 @@ export class TransfrContentCompareElement extends UmbLitElement {
         flex-shrink: 0;
       }
 
+      /* The batch stays in view while the trees scroll, and stands out from the other banners: brand tint, a full
+         border and a shadow. */
       .banner.selection {
-        border-left-color: var(--uui-color-focus, var(--uui-color-selected));
+        position: sticky;
+        top: var(--uui-size-space-3);
+        z-index: 2;
+        padding: var(--uui-size-space-4) var(--uui-size-space-5);
+        border: 1px solid var(--transfr-color-brand);
+        border-left-width: 6px;
+        background: color-mix(in srgb, var(--transfr-color-brand) 10%, var(--uui-color-surface));
+        box-shadow: var(--uui-shadow-depth-3);
+        font-weight: 700;
+      }
+
+      .banner.selection > umb-icon {
+        color: var(--transfr-color-brand);
+        font-size: 1.25em;
       }
 
       .doc {

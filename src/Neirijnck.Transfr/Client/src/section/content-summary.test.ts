@@ -23,6 +23,7 @@ describe('describeDifference', () => {
     [difference('State'), 'publish state'],
     [difference('Template'), 'template'],
     [difference('DocumentType'), 'document type'],
+    [difference('MediaType'), 'media type'],
     [difference('Value'), 'a value'],
     [difference('SomethingNew'), 'SomethingNew'],
   ])('describes %o as %s', (input, expected) => {

@@ -4,8 +4,8 @@ using Umbraco.Cms.Infrastructure.Persistence.DatabaseAnnotations;
 namespace Neirijnck.Transfr.Persistence;
 
 /// <summary>
-/// One document copied by Transfr: the baseline for conflict detection (the target's last save right after our copy)
-/// and, later, the history view. Rows are only ever added.
+/// One document or media item copied by Transfr: the baseline for conflict detection (the target's last save right after
+/// our copy) and the history view. Rows are only ever added.
 /// </summary>
 [TableName(TableName)]
 [PrimaryKey("id", AutoIncrement = true)]
@@ -24,8 +24,17 @@ internal sealed class CopyHistoryDto
     [Index(IndexTypes.NonClustered, Name = "IX_transfrCopyHistory_remote_documentKey", ForColumns = "remote,documentKey")]
     public string Remote { get; set; } = string.Empty;
 
+    /// <summary>The document or media item (keys are unique across both), the same key on both sides.</summary>
     [Column("documentKey")]
     public Guid DocumentKey { get; set; }
+
+    /// <summary>
+    /// Document or Media (<see cref="Core.Planning.PlanItemKind"/>); rows from before media were copied are documents.
+    /// </summary>
+    [Column("kind")]
+    [Length(20)]
+    [Constraint(Default = "Document")]
+    public string Kind { get; set; } = "Document";
 
     /// <summary>ToRemote (from here to the remote) or, later, FromRemote.</summary>
     [Column("direction")]

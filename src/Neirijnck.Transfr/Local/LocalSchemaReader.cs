@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Neirijnck.Transfr.Core.Schema;
 using Umbraco.Cms.Api.Management.ViewModels.DataType;
 using Umbraco.Cms.Api.Management.ViewModels.DocumentType;
+using Umbraco.Cms.Api.Management.ViewModels.MediaType;
 using Umbraco.Cms.Core.Mapping;
 using Umbraco.Cms.Core.Services;
 // Inside Neirijnck.Transfr.* the bare name Constants resolves to the package's own Constants class.
@@ -12,24 +13,28 @@ using UmbracoConstants = Umbraco.Cms.Core.Constants;
 namespace Neirijnck.Transfr.Local;
 
 /// <summary>
-/// Reads one schema item of this environment in-process, in exactly the shape the remote's <c>document-type/{id}</c>
-/// and <c>data-type/{id}</c> return: the same services, the same mapping and the same serializer settings as Umbraco's
-/// own endpoints (<c>ByKeyDocumentTypeController</c>, <c>ByKeyDataTypeController</c>).
+/// Reads one schema item of this environment in-process, in exactly the shape the remote's <c>document-type/{id}</c>,
+/// <c>media-type/{id}</c> and <c>data-type/{id}</c> return: the same services, the same mapping and the same serializer
+/// settings as Umbraco's own endpoints (<c>ByKeyDocumentTypeController</c>, <c>ByKeyMediaTypeController</c>,
+/// <c>ByKeyDataTypeController</c>).
 /// </summary>
 public sealed class LocalSchemaReader
 {
     private readonly IContentTypeService contentTypeService;
+    private readonly IMediaTypeService mediaTypeService;
     private readonly IDataTypeService dataTypeService;
     private readonly IUmbracoMapper mapper;
     private readonly JsonSerializerOptions serializerOptions;
 
     public LocalSchemaReader(
         IContentTypeService contentTypeService,
+        IMediaTypeService mediaTypeService,
         IDataTypeService dataTypeService,
         IUmbracoMapper mapper,
         IOptionsMonitor<JsonOptions> jsonOptions)
     {
         this.contentTypeService = contentTypeService;
+        this.mediaTypeService = mediaTypeService;
         this.dataTypeService = dataTypeService;
         this.mapper = mapper;
         this.serializerOptions = jsonOptions.Get(UmbracoConstants.JsonOptionsNames.BackOffice).JsonSerializerOptions;
@@ -44,6 +49,9 @@ public sealed class LocalSchemaReader
         {
             SchemaItemKind.DocumentType => await this.contentTypeService.GetAsync(key) is { } type
                 ? this.mapper.Map<DocumentTypeResponseModel>(type)
+                : null,
+            SchemaItemKind.MediaType => await this.mediaTypeService.GetAsync(key) is { } mediaType
+                ? this.mapper.Map<MediaTypeResponseModel>(mediaType)
                 : null,
             SchemaItemKind.DataType => await this.dataTypeService.GetAsync(key) is { } dataType
                 ? this.mapper.Map<DataTypeResponseModel>(dataType)

@@ -47,8 +47,8 @@ public static class DocumentDiffer
 
     private static string? IdText(JsonNode? reference) => DocumentJson.IdOf(reference)?.ToString("D");
 
-    // Property values (of the document, a block or block settings) by alias, culture and segment.
-    private static List<PropertyDiff> DiffValues(JsonNode? local, JsonNode? remote)
+    // Property values (of the document, a block, block settings or a media item) by alias, culture and segment.
+    internal static List<PropertyDiff> DiffValues(JsonNode? local, JsonNode? remote)
     {
         var localValues = DocumentJson.Entries(local, withAlias: true);
         var remoteValues = DocumentJson.Entries(remote, withAlias: true);

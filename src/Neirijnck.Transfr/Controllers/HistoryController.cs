@@ -60,7 +60,8 @@ public class HistoryController : TransfrApiControllerBase
                         .Select(document => new TransferHistoryDocumentResponseModel(
                             document.DocumentKey,
                             page.DocumentNames.GetValueOrDefault(document.DocumentKey),
-                            document.Outcome))
+                            document.Outcome,
+                            document.Kind.ToString()))
                         .ToList()))
                 .ToList(),
             page.NextBefore));

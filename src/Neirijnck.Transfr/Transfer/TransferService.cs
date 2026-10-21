@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -11,15 +12,16 @@ using Neirijnck.Transfr.Local;
 using Neirijnck.Transfr.Persistence;
 using Neirijnck.Transfr.Planning;
 using Neirijnck.Transfr.Remote;
+using Umbraco.Cms.Core.IO;
 using Umbraco.Cms.Core.Services;
 
 namespace Neirijnck.Transfr.Transfer;
 
 /// <summary>
 /// Carries out a dry run on a remote: plans again and refuses when anything differs from what the dry run showed,
-/// writes row by row (parents first) and stops at the first failure, puts copied nodes in their place among their
-/// siblings, and records what it wrote in the copy history. It writes only through the allowlisted create, update and
-/// sort requests: nothing is deleted, unpublished or moved.
+/// writes row by row (media before the documents that use them, parents first) and stops at the first failure, puts
+/// copied nodes in their place among their siblings, and records what it wrote in the copy history. It writes only
+/// through the allowlisted upload, create, update and sort requests: nothing is deleted, unpublished or moved.
 /// </summary>
 public sealed partial class TransferService
 {
@@ -32,6 +34,8 @@ public sealed partial class TransferService
     private readonly RemoteClient client;
     private readonly RemoteTreeReader remoteTree;
     private readonly RemoteDocumentReader remoteDocuments;
+    private readonly RemoteMediaReader remoteMedia;
+    private readonly MediaFileManager mediaFiles;
     private readonly LocalTreeReader localTree;
     private readonly CopyHistoryStore history;
     private readonly ILanguageService languageService;
@@ -42,6 +46,8 @@ public sealed partial class TransferService
         RemoteClient client,
         RemoteTreeReader remoteTree,
         RemoteDocumentReader remoteDocuments,
+        RemoteMediaReader remoteMedia,
+        MediaFileManager mediaFiles,
         LocalTreeReader localTree,
         CopyHistoryStore history,
         ILanguageService languageService,
@@ -51,6 +57,8 @@ public sealed partial class TransferService
         this.client = client;
         this.remoteTree = remoteTree;
         this.remoteDocuments = remoteDocuments;
+        this.remoteMedia = remoteMedia;
+        this.mediaFiles = mediaFiles;
         this.localTree = localTree;
         this.history = history;
         this.languageService = languageService;
@@ -60,7 +68,7 @@ public sealed partial class TransferService
     /// <param name="remote">The remote to write to.</param>
     /// <param name="userKey">The backoffice user, for the copy history.</param>
     /// <param name="selection">The selection the dry run was made for.</param>
-    /// <param name="dryRun">The document rows as the dry run showed them.</param>
+    /// <param name="dryRun">The rows as the dry run showed them.</param>
     /// <param name="overwrite">Conflicts chosen to overwrite.</param>
     /// <param name="cancellationToken">Stops between rows; a write already sent is not undone.</param>
     /// <exception cref="PlanSelectionException">The selection can't be planned, or overwrite names a node that isn't a conflict.</exception>
@@ -121,11 +129,7 @@ public sealed partial class TransferService
         {
             var writes = row.Outcome is PlanOutcome.Create or PlanOutcome.Update
                 || (row.Outcome == PlanOutcome.Conflict && overwrite.Contains(row.Key));
-            if (row.Kind == PlanItemKind.Media)
-            {
-                rows.Add(new TransferRow(row, TransferRowResult.MediaLater, null, null));
-            }
-            else if (!writes)
+            if (!writes)
             {
                 var result = row.Outcome switch
                 {
@@ -141,7 +145,9 @@ public sealed partial class TransferService
             }
             else
             {
-                var (error, extraRequests) = await this.WriteAsync(remote, row, plan.SourceJson[row.Key], plan.TargetJson.GetValueOrDefault(row.Key), cancellationToken);
+                var (error, extraRequests) = row.Kind == PlanItemKind.Media
+                    ? await this.WriteMediaAsync(remote, row, plan.SourceJson[row.Key], plan.TargetJson.GetValueOrDefault(row.Key), cancellationToken)
+                    : await this.WriteAsync(remote, row, plan.SourceJson[row.Key], plan.TargetJson.GetValueOrDefault(row.Key), cancellationToken);
                 requests += extraRequests;
                 failed = error is not null;
                 rows.Add(new TransferRow(row, failed ? TransferRowResult.Failed : TransferRowResult.Written, error, null));
@@ -217,13 +223,74 @@ public sealed partial class TransferService
             }
 
             var error = $"The remote answered {(int)response.StatusCode}: {ProblemOf(await response.Content.ReadAsStringAsync(cancellationToken))}";
-            LogWriteFailed(this.logger, row.Key, remote.Alias, (int)response.StatusCode);
+            LogWriteFailed(this.logger, row.Kind, row.Key, remote.Alias, (int)response.StatusCode);
             return (error, 1);
         }
         catch (Exception exception) when (exception is HttpRequestException or RemoteAuthenticationException)
         {
-            LogWriteError(this.logger, row.Key, remote.Alias, exception);
+            LogWriteError(this.logger, row.Kind, row.Key, remote.Alias, exception);
             return (exception.Message, 1);
+        }
+    }
+
+    // One media item: its new or changed files first, each as a temporary file read from this site's media storage, then
+    // the create or update naming them, then a read back that every file arrived (Umbraco saves a file it refuses as an
+    // empty path and still answers with success, measured). Returns why it failed (null when it worked) and the requests.
+    private async Task<(string? Error, int Requests)> WriteMediaAsync(
+        RemoteDefinition remote,
+        PlanRow row,
+        string sourceJson,
+        string? targetJson,
+        CancellationToken cancellationToken)
+    {
+        var media = MediaTransferRequests.For(row, sourceJson, targetJson, Guid.NewGuid);
+        var requests = 0;
+        try
+        {
+            foreach (var upload in media.Uploads)
+            {
+                await using var file = this.mediaFiles.FileSystem.OpenFile(this.mediaFiles.FileSystem.GetRelativePath(upload.Src));
+                using var form = new MultipartFormDataContent();
+                form.Add(new StringContent(upload.TemporaryFileId.ToString("D")), "Id");
+                var fileContent = new StreamContent(file);
+                fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                form.Add(fileContent, "File", upload.FileName);
+                using var uploaded = await this.client.SendAsync(remote, HttpMethod.Post, $"{RemoteRequestPolicy.ApiBase}/temporary-file", content: form, cancellationToken: cancellationToken);
+                requests++;
+                if (!uploaded.IsSuccessStatusCode)
+                {
+                    LogWriteFailed(this.logger, row.Kind, row.Key, remote.Alias, (int)uploaded.StatusCode);
+                    return ($"Uploading {upload.FileName} failed: the remote answered {(int)uploaded.StatusCode}: {ProblemOf(await uploaded.Content.ReadAsStringAsync(cancellationToken))}", requests);
+                }
+            }
+
+            using var content = new StringContent(media.Write.Body, Encoding.UTF8, "application/json");
+            using var response = await this.client.SendAsync(remote, new HttpMethod(media.Write.Method), media.Write.Path, content: content, cancellationToken: cancellationToken);
+            requests++;
+            if (!response.IsSuccessStatusCode)
+            {
+                LogWriteFailed(this.logger, row.Kind, row.Key, remote.Alias, (int)response.StatusCode);
+                return ($"The remote answered {(int)response.StatusCode}: {ProblemOf(await response.Content.ReadAsStringAsync(cancellationToken))}", requests);
+            }
+
+            if (media.Uploads.Count > 0)
+            {
+                var missing = MediaTransferRequests.MissingFiles(sourceJson, await this.remoteMedia.ReadAsync(remote, row.Key, cancellationToken));
+                requests++;
+                if (missing.Count > 0)
+                {
+                    LogFileRefused(this.logger, row.Key, remote.Alias);
+                    return ($"The remote saved it without its file ({string.Join(", ", missing)}): it refused the upload.", requests);
+                }
+            }
+
+            return (null, requests);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or RemoteAuthenticationException or IOException)
+        {
+            // IOException: the file is missing from this site's media storage.
+            LogWriteError(this.logger, row.Kind, row.Key, remote.Alias, exception);
+            return (exception.Message, requests);
         }
     }
 
@@ -293,7 +360,9 @@ public sealed partial class TransferService
             string? json = null;
             try
             {
-                json = await this.remoteDocuments.ReadAsync(remote, row.Row.Key, CancellationToken.None);
+                json = row.Row.Kind == PlanItemKind.Media
+                    ? await this.remoteMedia.ReadAsync(remote, row.Row.Key, CancellationToken.None)
+                    : await this.remoteDocuments.ReadAsync(remote, row.Row.Key, CancellationToken.None);
             }
             catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.NotFound)
             {
@@ -301,14 +370,15 @@ public sealed partial class TransferService
             }
             catch (Exception exception) when (exception is HttpRequestException or RemoteAuthenticationException)
             {
-                LogReadBackFailed(this.logger, row.Row.Key, remote.Alias, exception);
+                LogReadBackFailed(this.logger, row.Row.Kind, row.Row.Key, remote.Alias, exception);
             }
 
             requests++;
-            finalRows.Add(row with { TargetState = json is null ? "absent" : DocumentStamp.States(json) });
+            // Media items carry no publish state.
+            finalRows.Add(row with { TargetState = json is null ? "absent" : row.Row.Kind == PlanItemKind.Media ? "Saved" : DocumentStamp.States(json) });
             if (row.Result == TransferRowResult.Written && json is not null && DocumentStamp.LastUpdate(json) is { } saved)
             {
-                records.Add(new CopyRecord(row.Row.Key, row.Row.Outcome == PlanOutcome.Create ? "Create" : "Update", saved));
+                records.Add(new CopyRecord(row.Row.Key, row.Row.Outcome == PlanOutcome.Create ? "Create" : "Update", saved, row.Row.Kind));
             }
         }
 
@@ -344,17 +414,20 @@ public sealed partial class TransferService
     [LoggerMessage(Level = LogLevel.Information, Message = "Transferred to remote {Alias}: {Written} written, failed {Failed}, {Sorted} parents sorted, {Requests} remote requests, {Milliseconds} ms")]
     private static partial void LogTransferred(ILogger logger, string alias, int written, bool failed, int sorted, int requests, long milliseconds);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Writing document {Key} to remote {Alias} failed with {Status}")]
-    private static partial void LogWriteFailed(ILogger logger, Guid key, string alias, int status);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Writing {Kind} {Key} to remote {Alias} failed with {Status}")]
+    private static partial void LogWriteFailed(ILogger logger, PlanItemKind kind, Guid key, string alias, int status);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Writing document {Key} to remote {Alias} failed")]
-    private static partial void LogWriteError(ILogger logger, Guid key, string alias, Exception exception);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Writing {Kind} {Key} to remote {Alias} failed")]
+    private static partial void LogWriteError(ILogger logger, PlanItemKind kind, Guid key, string alias, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Remote {Alias} saved media {Key} without its file: it refused the upload")]
+    private static partial void LogFileRefused(ILogger logger, Guid key, string alias);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Sorting on remote {Alias} failed")]
     private static partial void LogSortFailed(ILogger logger, string alias, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Reading document {Key} back from remote {Alias} failed")]
-    private static partial void LogReadBackFailed(ILogger logger, Guid key, string alias, Exception exception);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Reading {Kind} {Key} back from remote {Alias} failed")]
+    private static partial void LogReadBackFailed(ILogger logger, PlanItemKind kind, Guid key, string alias, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Recording a transfer to remote {Alias} in the copy history failed")]
     private static partial void LogHistoryFailed(ILogger logger, string alias, Exception exception);

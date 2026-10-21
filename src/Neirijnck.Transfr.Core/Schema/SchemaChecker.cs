@@ -4,10 +4,10 @@ using Neirijnck.Transfr.Core.Content;
 namespace Neirijnck.Transfr.Core.Schema;
 
 /// <summary>
-/// Checks the schema behind a document type on both sides, by key: the type, its compositions, the data types of its
-/// properties, and the element types those data types allow in blocks, each compared on what a copy depends on. Names,
-/// icons, descriptions, tabs and sort orders are never read. Both sides are read as the Management API serves them
-/// (<c>document-type/{id}</c>, <c>data-type/{id}</c>).
+/// Checks the schema behind a document type or a media type on both sides, by key: the type, its compositions, the data
+/// types of its properties, and the element types those data types allow in blocks, each compared on what a copy depends
+/// on. Names, icons, descriptions, tabs and sort orders are never read. Both sides are read as the Management API serves
+/// them (<c>document-type/{id}</c>, <c>media-type/{id}</c>, <c>data-type/{id}</c>).
 /// </summary>
 public static class SchemaChecker
 {
@@ -15,8 +15,27 @@ public static class SchemaChecker
     /// <param name="readLocal">Reads an item locally; null when it doesn't exist here.</param>
     /// <param name="readRemote">Reads an item on the remote; null when it doesn't exist there.</param>
     /// <param name="cancellationToken">Stops the check.</param>
-    public static async Task<SchemaCheck> CheckAsync(
+    public static Task<SchemaCheck> CheckAsync(
         Guid documentTypeKey,
+        Func<SchemaItemKind, Guid, CancellationToken, Task<string?>> readLocal,
+        Func<SchemaItemKind, Guid, CancellationToken, Task<string?>> readRemote,
+        CancellationToken cancellationToken)
+        => WalkAsync(SchemaItemKind.DocumentType, documentTypeKey, readLocal, readRemote, cancellationToken);
+
+    /// <param name="mediaTypeKey">The media type of the media item to copy.</param>
+    /// <param name="readLocal">Reads an item locally; null when it doesn't exist here.</param>
+    /// <param name="readRemote">Reads an item on the remote; null when it doesn't exist there.</param>
+    /// <param name="cancellationToken">Stops the check.</param>
+    public static Task<SchemaCheck> CheckMediaTypeAsync(
+        Guid mediaTypeKey,
+        Func<SchemaItemKind, Guid, CancellationToken, Task<string?>> readLocal,
+        Func<SchemaItemKind, Guid, CancellationToken, Task<string?>> readRemote,
+        CancellationToken cancellationToken)
+        => WalkAsync(SchemaItemKind.MediaType, mediaTypeKey, readLocal, readRemote, cancellationToken);
+
+    private static async Task<SchemaCheck> WalkAsync(
+        SchemaItemKind rootKind,
+        Guid rootKey,
         Func<SchemaItemKind, Guid, CancellationToken, Task<string?>> readLocal,
         Func<SchemaItemKind, Guid, CancellationToken, Task<string?>> readRemote,
         CancellationToken cancellationToken)
@@ -27,7 +46,7 @@ public static class SchemaChecker
         var problems = new List<SchemaProblem>();
         var queue = new Queue<(SchemaItemKind Kind, Guid Key)>();
         var seen = new HashSet<(SchemaItemKind Kind, Guid Key)>();
-        Enqueue(SchemaItemKind.DocumentType, documentTypeKey);
+        Enqueue(rootKind, rootKey);
 
         while (queue.Count > 0)
         {
@@ -49,7 +68,7 @@ public static class SchemaChecker
                 continue;
             }
 
-            var details = kind == SchemaItemKind.DocumentType ? CompareDocumentTypes(local, remote) : CompareDataTypes(local, remote);
+            var details = kind == SchemaItemKind.DataType ? CompareDataTypes(local, remote) : CompareTypes(kind, local, remote);
             if (details.Count > 0)
             {
                 problems.Add(new SchemaProblem(kind, key, DocumentJson.StringOf(local["name"]), IsElement(local), SchemaProblemReason.Differs, details));
@@ -61,7 +80,7 @@ public static class SchemaChecker
             }
         }
 
-        return new SchemaCheck(documentTypeKey, problems);
+        return new SchemaCheck(rootKey, problems);
 
         void Enqueue(SchemaItemKind kind, Guid key)
         {
@@ -80,11 +99,11 @@ public static class SchemaChecker
     // configuration allows in blocks (block list, block grid and rich text all name them the same way).
     private static IEnumerable<(SchemaItemKind Kind, Guid Key)> ReferencesOf(SchemaItemKind kind, JsonObject item)
     {
-        if (kind == SchemaItemKind.DocumentType)
+        if (kind != SchemaItemKind.DataType)
         {
-            foreach (var key in IdsOf(item["compositions"], "documentType"))
+            foreach (var key in IdsOf(item["compositions"], ReferenceName(kind)))
             {
-                yield return (SchemaItemKind.DocumentType, key);
+                yield return (kind, key);
             }
 
             foreach (var key in IdsOf(item["properties"], "dataType"))
@@ -136,20 +155,30 @@ public static class SchemaChecker
             .Select(entry => DocumentJson.IdOf(entry[reference]))
             .OfType<Guid>();
 
-    private static List<string> CompareDocumentTypes(JsonObject local, JsonObject remote)
+    // A document type names its compositions and allowed children as documentType, a media type as mediaType.
+    private static string ReferenceName(SchemaItemKind kind) => kind == SchemaItemKind.MediaType ? "mediaType" : "documentType";
+
+    private static List<string> CompareTypes(SchemaItemKind kind, JsonObject local, JsonObject remote)
     {
+        var reference = ReferenceName(kind);
         var details = new List<string>();
         CompareText(details, "alias", local["alias"], remote["alias"]);
         CompareFlag(details, "element type", local["isElement"], remote["isElement"]);
         CompareFlag(details, "varies by culture", local["variesByCulture"], remote["variesByCulture"]);
         CompareFlag(details, "varies by segment", local["variesBySegment"], remote["variesBySegment"]);
         CompareFlag(details, "allowed at the root", local["allowedAsRoot"], remote["allowedAsRoot"]);
-        CompareIds(details, "compositions differ", IdsOf(local["compositions"], "documentType"), IdsOf(remote["compositions"], "documentType"));
-        CompareIds(details, "allowed child types differ", IdsOf(local["allowedDocumentTypes"], "documentType"), IdsOf(remote["allowedDocumentTypes"], "documentType"));
-        CompareIds(details, "allowed templates differ", IdsOfReferences(local["allowedTemplates"]), IdsOfReferences(remote["allowedTemplates"]));
-        if (DocumentJson.IdOf(local["defaultTemplate"]) != DocumentJson.IdOf(remote["defaultTemplate"]))
+        CompareIds(details, "compositions differ", IdsOf(local["compositions"], reference), IdsOf(remote["compositions"], reference));
+        var allowed = kind == SchemaItemKind.MediaType ? "allowedMediaTypes" : "allowedDocumentTypes";
+        CompareIds(details, "allowed child types differ", IdsOf(local[allowed], reference), IdsOf(remote[allowed], reference));
+
+        // Media types have no templates.
+        if (kind == SchemaItemKind.DocumentType)
         {
-            details.Add("the default template differs");
+            CompareIds(details, "allowed templates differ", IdsOfReferences(local["allowedTemplates"]), IdsOfReferences(remote["allowedTemplates"]));
+            if (DocumentJson.IdOf(local["defaultTemplate"]) != DocumentJson.IdOf(remote["defaultTemplate"]))
+            {
+                details.Add("the default template differs");
+            }
         }
 
         var localProperties = PropertiesByAlias(local);

@@ -117,6 +117,42 @@ public sealed class ManagementApiTreeParserTests
     }
 
     [Fact]
+    public void ParseTreePage_ReadsAMediaTree_WithTheMediaTypeAsTheType()
+    {
+        // tree/media/root as measured on an Umbraco 17.7.0 test site: a folder, then two images.
+        var (total, nodes) = ManagementApiTreeParser.ParseTreePage(Fixture("tree-media-root.json"), 0, "en-US");
+
+        Assert.Equal(3, total);
+        Assert.Equal(
+            [
+                ("Transfr Images", true, (Guid?)new Guid("f38bd2d7-65d0-48e6-95dc-87ce06ec2d3d"), "icon-folder"),
+                ("Green (unreferenced)", false, new Guid("cc07b313-0843-4aa8-bbda-871c8da728c8"), "icon-picture"),
+                ("Orange", false, new Guid("cc07b313-0843-4aa8-bbda-871c8da728c8"), "icon-picture"),
+            ],
+            nodes.Select(node => (node.Name, node.HasChildren, node.DocumentTypeKey, node.DocumentTypeIcon)));
+        Assert.Equal([0, 1, 2], nodes.Select(node => node.SortIndex));
+    }
+
+    [Fact]
+    public void ParseMediaItems_KeepsTrashedMediaItems_WithoutTheirRecycleBinParent()
+    {
+        // item/media as measured on an Umbraco 17.7.0 test site; the second item as a trashed one is listed (isTrashed, the
+        // recycle bin as its parent).
+        const string json = """
+            [{"isTrashed":false,"parent":{"id":"a3f1f94d-30a7-433b-8fc9-3ba35f61f72b"},"hasChildren":false,"mediaType":{"id":"cc07b313-0843-4aa8-bbda-871c8da728c8","icon":"icon-picture","collection":null},"variants":[{"name":"Blue","culture":null}],"id":"a28038ed-b11a-41f6-a990-bed021cac2fb","flags":[]},
+             {"isTrashed":true,"parent":{"id":"bf7c7cbc-952f-4518-97a2-69e9c7b33842"},"hasChildren":false,"mediaType":{"id":"cc07b313-0843-4aa8-bbda-871c8da728c8","icon":"icon-picture","collection":null},"variants":[{"name":"Red","culture":null}],"id":"d7055f49-d608-40a3-94d4-d4b5cbd0facb","flags":[]},
+             {"isTrashed":false,"parent":null,"hasChildren":true,"mediaType":{"id":"f38bd2d7-65d0-48e6-95dc-87ce06ec2d3d","icon":"icon-folder","collection":null},"variants":[{"name":"Images","culture":null}],"id":"a3f1f94d-30a7-433b-8fc9-3ba35f61f72b","flags":[]}]
+            """;
+
+        var items = ManagementApiTreeParser.ParseMediaItems(json);
+
+        Assert.Equal((new Guid("a3f1f94d-30a7-433b-8fc9-3ba35f61f72b"), false), items[new Guid("a28038ed-b11a-41f6-a990-bed021cac2fb")]);
+        Assert.Equal(((Guid?)null, true), items[new Guid("d7055f49-d608-40a3-94d4-d4b5cbd0facb")]);
+        Assert.Equal(((Guid?)null, false), items[new Guid("a3f1f94d-30a7-433b-8fc9-3ba35f61f72b")]);
+        Assert.Equal(3, items.Count);
+    }
+
+    [Fact]
     public void ParseTreePage_GivesANodeWithoutANameAPlaceholder()
     {
         const string json = """{"total":1,"items":[{"id":"924c1efa-9b3d-4575-9106-166e6ed39ad1","hasChildren":false,"variants":[{"name":"","culture":null}]}]}""";

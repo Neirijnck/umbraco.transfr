@@ -5,7 +5,7 @@ export type TransfrCopyPlanModalData = {
   /** The remote to copy to. */
   alias: string;
   remoteName: string;
-  /** The nodes picked in the tree. */
+  /** The batch: the nodes and media items picked in the trees. */
   selection: Array<PlanSelectionRequestModel>;
   /**
    * Called as soon as a transfer has run, however the panel is closed afterwards (Escape rejects the modal and drops

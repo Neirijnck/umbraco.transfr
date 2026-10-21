@@ -16,7 +16,9 @@ export function describeDifference(difference: ContentDifferenceResponseModel): 
             ? 'template'
             : difference.kind === 'DocumentType'
               ? 'document type'
-              : difference.kind;
+              : difference.kind === 'MediaType'
+                ? 'media type'
+                : difference.kind;
   const where = [difference.culture, difference.segment].filter(Boolean).join(', ');
   return where ? `${what} (${where})` : what;
 }

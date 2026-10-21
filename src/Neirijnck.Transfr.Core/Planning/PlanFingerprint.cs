@@ -5,8 +5,9 @@ using Neirijnck.Transfr.Core.Content;
 namespace Neirijnck.Transfr.Core.Planning;
 
 /// <summary>
-/// What a dry run saw of a document on both sides: the last save here and on the target (or that it wasn't there). A
-/// transfer plans again and refuses when a row's fingerprint changed: someone saved on either side since the dry run.
+/// What a dry run saw of a document or media item on both sides: the last save here and on the target (or that it
+/// wasn't there). A transfer plans again and refuses when a row's fingerprint changed: someone saved on either side since
+/// the dry run.
 /// </summary>
 internal static class PlanFingerprint
 {
