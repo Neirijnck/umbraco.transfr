@@ -4,6 +4,15 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 ## [Unreleased]
 
+### Added
+
+- Media: the media a copied node uses are copied along, with the same keys: created with their folders when the remote lacks them, updated when they changed here, and skipped as a conflict (or overwritten, when chosen) when they changed there. A file is uploaded only when it is new or changed. The copy history records media too.
+- A Media view: the media tree here next to the remote's, compared like the content tree. Media items (a folder with or without everything below it) can be picked there on their own; they join the same selection as the nodes. A media item opens on both sides, with its values and its file (images side by side), also from the History view.
+
+### Changed
+
+- The selection stays in view while the trees scroll, and stands out more.
+
 ## [17.1.0] - 2026-10-16
 
 ### Added
