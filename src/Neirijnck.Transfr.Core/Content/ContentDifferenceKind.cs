@@ -1,7 +1,7 @@
 ﻿namespace Neirijnck.Transfr.Core.Content;
 
 /// <summary>
-/// What differs between the two sides of a document.
+/// What differs between the two sides of a document or media item.
 /// </summary>
 public enum ContentDifferenceKind
 {
@@ -10,4 +10,5 @@ public enum ContentDifferenceKind
     Name,
     State,
     Value,
+    MediaType,
 }

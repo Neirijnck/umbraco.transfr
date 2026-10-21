@@ -78,25 +78,30 @@ public sealed class RemoteTreeReader
         => this.LocateItemsAsync(remote, "item/document", keys, cancellationToken);
 
     /// <summary>
-    /// Where these media items are on the remote: key to parent folder key (null = the root). Unknown and trashed keys
-    /// are left out.
+    /// Where these media items are on the remote: key to parent folder key (null = the root) and whether it is in the
+    /// recycle bin. Unknown keys are left out.
     /// </summary>
-    public async Task<(IReadOnlyDictionary<Guid, Guid?> Parents, int Requests)> LocateMediaAsync(
+    public Task<(IReadOnlyDictionary<Guid, (Guid? ParentKey, bool IsTrashed)> Items, int Requests)> LocateMediaAsync(
         RemoteDefinition remote,
         IReadOnlyCollection<Guid> keys,
         CancellationToken cancellationToken)
-    {
-        var (locations, requests) = await this.LocateItemsAsync(remote, "item/media", keys, cancellationToken);
-        return (locations.ToDictionary(pair => pair.Key, pair => pair.Value.ParentKey), requests);
-    }
+        => this.ReadItemsAsync(remote, "item/media", keys, ManagementApiTreeParser.ParseMediaItems, cancellationToken);
 
-    private async Task<(IReadOnlyDictionary<Guid, ItemLocation> Locations, int Requests)> LocateItemsAsync(
+    private Task<(IReadOnlyDictionary<Guid, ItemLocation> Locations, int Requests)> LocateItemsAsync(
         RemoteDefinition remote,
         string itemPath,
         IReadOnlyCollection<Guid> keys,
         CancellationToken cancellationToken)
+        => this.ReadItemsAsync(remote, itemPath, keys, ManagementApiTreeParser.ParseItemLocations, cancellationToken);
+
+    private async Task<(IReadOnlyDictionary<Guid, T> Items, int Requests)> ReadItemsAsync<T>(
+        RemoteDefinition remote,
+        string itemPath,
+        IReadOnlyCollection<Guid> keys,
+        Func<string, IReadOnlyDictionary<Guid, T>> parse,
+        CancellationToken cancellationToken)
     {
-        var locations = new Dictionary<Guid, ItemLocation>();
+        var items = new Dictionary<Guid, T>();
         var requests = 0;
         foreach (var batch in keys.Chunk(LocateBatchSize))
         {
@@ -104,12 +109,12 @@ public sealed class RemoteTreeReader
             var json = await this.client.GetStringAsync(remote, $"{RemoteRequestPolicy.ApiBase}/{itemPath}?{query}", cancellationToken);
             requests++;
 
-            foreach (var (key, location) in ManagementApiTreeParser.ParseItemLocations(json))
+            foreach (var (key, item) in parse(json))
             {
-                locations[key] = location;
+                items[key] = item;
             }
         }
 
-        return (locations, requests);
+        return (items, requests);
     }
 }

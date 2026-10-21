@@ -27,7 +27,7 @@ import { describeSchemaProblem, describeSeparateInstall } from './schema-view.js
 import { addToSelection, describeSelection, fromRequest, toRequest } from './selection.js';
 import type { Selection } from './selection.js';
 import { formatDuration } from './subtree.js';
-import { countWrites, describeDrift, describeTransfer, resultLook, toDryRun } from './transfer-view.js';
+import { countWrites, describeDrift, describeTransfer, describeWrites, resultLook, toDryRun } from './transfer-view.js';
 
 /**
  * The dry run of copying the selected nodes to a remote: what would happen to each node, and why. It reads both sides
@@ -175,7 +175,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
               : html`<uui-button
                   look="primary"
                   color="positive"
-                  label=${`Transfer ${writes} ${writes === 1 ? 'node' : 'nodes'} to ${remote}`}
+                  label=${`Transfer ${plan ? describeWrites(plan.rows, this._overwrite) : '0 nodes'} to ${remote}`}
                   .state=${this._transferring ? 'waiting' : undefined}
                   ?disabled=${writes === 0 || refused || this._loading || this._transferring || !plan}
                   @click=${() => this.#transfer()}
@@ -324,9 +324,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
         <div class="head">
           <umb-icon class="kind" name=${row.kind === 'Media' ? 'icon-picture' : 'icon-document'}></umb-icon>
           <strong class="name">${row.name}</strong>
-          <small
-            >${row.kind === 'Media' ? 'Media, planned along: copying media comes later' : (row.documentTypeName ?? '')}</small
-          >
+          <small>${row.documentTypeName ?? (row.kind === 'Media' ? 'Media' : '')}</small>
           <uui-tag color=${look.color} look=${look.look}
             ><span class="chip"><umb-icon name=${look.icon}></umb-icon>${look.label}</span></uui-tag
           >
@@ -337,7 +335,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
         ${row.lastCopied ? html`<div class="line">${describeLastCopy(row.lastCopied, remote)}</div>` : nothing}
         ${publish ? html`<div class="line">${publish}</div>` : nothing}
         ${
-          row.kind === 'Document' && row.outcome === 'Conflict'
+          row.outcome === 'Conflict'
             ? html`<label class="line overwrite">
                 <input
                   type="checkbox"
@@ -366,7 +364,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
       <li class=${note.blocks ? 'blocks' : ''}>
         <umb-icon name=${note.blocks ? 'icon-block' : 'icon-info'}></umb-icon>
         <span>
-          ${describeNote(note, remote)}
+          ${describeNote(note, remote, row.kind)}
           ${
             note.kind === 'SchemaMismatch'
               ? html`<ul class="details">

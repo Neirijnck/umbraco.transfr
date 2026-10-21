@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using Neirijnck.Transfr.Core.History;
+using Neirijnck.Transfr.Core.Planning;
 
 namespace Neirijnck.Transfr.Core.Tests.History;
 
@@ -100,7 +101,7 @@ public sealed class TransferHistoryTests
     }
 
     private static CopyHistoryEntry Row(int id, Guid document, string outcome, Guid user, string time)
-        => new(id, document, outcome, user, At(time));
+        => new(id, document, outcome, user, At(time), PlanItemKind.Document);
 
     private static DateTimeOffset At(string time)
         => DateTimeOffset.Parse($"2026-10-15T{time}+00:00", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);

@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { TransferHistoryDocumentResponseModel } from '../api/index.js';
 import { describeTransferHeadline, outcomeWord, summarizeTransfer } from './history-view.js';
 
-const document = (outcome: string): TransferHistoryDocumentResponseModel => ({ key: 'k', name: 'About', outcome });
+const document = (outcome: string, kind = 'Document'): TransferHistoryDocumentResponseModel => ({
+  key: 'k',
+  name: 'About',
+  outcome,
+  kind,
+});
 
 describe('describeTransferHeadline', () => {
   // As the history answers it (measured on test site A): UTC, Brussels was UTC+2 then.
@@ -28,6 +33,12 @@ describe('summarizeTransfer', () => {
 
   it('says node for one', () => {
     expect(summarizeTransfer([document('Update')])).toBe('1 node: 1 updated');
+  });
+
+  it('counts media items apart from nodes', () => {
+    expect(summarizeTransfer([document('Update'), document('Create', 'Media'), document('Update', 'Media')])).toBe(
+      '1 node and 2 media items: 1 created, 2 updated',
+    );
   });
 
   it('shows an unknown outcome as named, after the known ones', () => {

@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using Neirijnck.Transfr.Core.History;
+using Neirijnck.Transfr.Core.Planning;
 using Neirijnck.Transfr.Core.Remote;
 using Umbraco.Cms.Infrastructure.Scoping;
 
@@ -28,8 +29,8 @@ public sealed class CopyHistoryStore
     }
 
     /// <summary>
-    /// For each of these documents copied from here to the remote before: the latest copy. Documents never copied there
-    /// are left out.
+    /// For each of these documents and media items copied from here to the remote before: the latest copy. Keys never
+    /// copied there are left out.
     /// </summary>
     public IReadOnlyDictionary<Guid, LastCopy> LatestCopies(RemoteDefinition remote, IReadOnlyCollection<Guid> keys)
     {
@@ -79,7 +80,7 @@ public sealed class CopyHistoryStore
                 identity,
                 ToRemote,
                 cursor);
-            rows.AddRange(chunk.Select(row => new CopyHistoryEntry(row.Id, row.DocumentKey, row.Outcome, row.UserKey, Utc(row.CopiedAt))));
+            rows.AddRange(chunk.Select(row => new CopyHistoryEntry(row.Id, row.DocumentKey, row.Outcome, row.UserKey, Utc(row.CopiedAt), Enum.Parse<PlanItemKind>(row.Kind))));
 
             var transfers = TransferHistory.Group(rows);
             if (!TransferHistory.NeedsMoreRows(transfers, take, noMoreRows: chunk.Count < RowsPerRead))
@@ -100,7 +101,7 @@ public sealed class CopyHistoryStore
     // copiedAt is written as UTC; the database hands it back without a kind.
     private static DateTimeOffset Utc(DateTime copiedAt) => new(DateTime.SpecifyKind(copiedAt, DateTimeKind.Utc));
 
-    /// <summary>Records documents just copied from here to the remote, all in one transaction.</summary>
+    /// <summary>Records documents and media items just copied from here to the remote, all in one transaction.</summary>
     public void RecordToRemote(RemoteDefinition remote, Guid userKey, IReadOnlyCollection<CopyRecord> records)
     {
         ArgumentNullException.ThrowIfNull(remote);
@@ -115,6 +116,7 @@ public sealed class CopyHistoryStore
             {
                 Remote = identity,
                 DocumentKey = record.DocumentKey,
+                Kind = record.Kind.ToString(),
                 Direction = ToRemote,
                 Outcome = record.Outcome,
                 UserKey = userKey,

@@ -13,8 +13,11 @@ namespace Neirijnck.Transfr.Planning;
 /// <param name="DocumentTypes">The name and property labels of each row's document type here.</param>
 /// <param name="SeparateInstall">Evidence that the remote was installed separately (empty when there is none).</param>
 /// <param name="RemoteRequests">Requests it cost on the remote.</param>
-/// <param name="SourceJson">The JSON here of every planned document, by key: what a transfer writes.</param>
-/// <param name="TargetJson">The remote's JSON of every planned document it has, by key: a field-level write builds on it.</param>
+/// <param name="SourceJson">The JSON here of every planned document and media item, by key: what a transfer writes.</param>
+/// <param name="TargetJson">
+/// The remote's JSON of every planned document and referenced media item it has, by key: a field-level write builds on
+/// it, a media write compares its files with it.
+/// </param>
 /// <param name="RemoteChanges">Who last changed each conflicting document on the remote, where that could be read.</param>
 /// <param name="LastCopies">The latest copy of each planned document to this remote, for those copied before.</param>
 public sealed record CopyPlanResult(

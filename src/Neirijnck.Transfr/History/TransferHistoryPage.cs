@@ -8,7 +8,7 @@ namespace Neirijnck.Transfr.History;
 /// <param name="Transfers">The transfers on this page.</param>
 /// <param name="NextBefore">The row id to read the next page before (null when this is the last page).</param>
 /// <param name="UserNames">Names of the users here who ran them (a deleted user is missing).</param>
-/// <param name="DocumentNames">Names of the documents here (a document no longer here is missing).</param>
+/// <param name="DocumentNames">Names of the documents and media items here (one no longer here is missing).</param>
 public sealed record TransferHistoryPage(
     IReadOnlyList<TransferRecord> Transfers,
     int? NextBefore,

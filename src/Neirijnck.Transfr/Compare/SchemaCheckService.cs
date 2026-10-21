@@ -7,9 +7,9 @@ using Neirijnck.Transfr.Remote;
 namespace Neirijnck.Transfr.Compare;
 
 /// <summary>
-/// Checks the schema behind document types against a remote with <see cref="SchemaChecker"/>, and tells a separately
-/// installed remote (the same alias under another key) from one that just misses a type. Remote schema items are kept
-/// for a few minutes per remote site, so expanding level after level doesn't read the same types again.
+/// Checks the schema behind document types and media types against a remote with <see cref="SchemaChecker"/>, and tells
+/// a separately installed remote (the same alias under another key) from one that just misses a type. Remote schema items
+/// are kept for a few minutes per remote site, so expanding level after level doesn't read the same types again.
 /// </summary>
 public sealed class SchemaCheckService
 {
@@ -80,6 +80,34 @@ public sealed class SchemaCheckService
         }
 
         return new SchemaLevelCheck(checks, separateInstall, requests);
+    }
+
+    /// <summary>
+    /// Checks each media type. A separate installation shows in the document types; built-in media types share their
+    /// keys across installations (measured), so their check needs no evidence of its own.
+    /// </summary>
+    public async Task<(IReadOnlyDictionary<Guid, SchemaCheck> Checks, int RemoteRequests)> CheckMediaTypesAsync(
+        RemoteDefinition remote,
+        IReadOnlyCollection<Guid> mediaTypeKeys,
+        CancellationToken cancellationToken)
+    {
+        var requests = 0;
+        var checks = new Dictionary<Guid, SchemaCheck>();
+        foreach (var key in mediaTypeKeys)
+        {
+            checks[key] = await SchemaChecker.CheckMediaTypeAsync(
+                key,
+                (kind, itemKey, _) => this.localSchema.ReadAsync(kind, itemKey),
+                async (kind, itemKey, token) =>
+                {
+                    var (json, read) = await this.ReadRemoteAsync(remote, kind, itemKey, token);
+                    requests += read ? 1 : 0;
+                    return json;
+                },
+                cancellationToken);
+        }
+
+        return (checks, requests);
     }
 
     // A remote item from the cache while fresh, else read; Read says whether a request was sent.

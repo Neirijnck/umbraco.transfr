@@ -29,6 +29,9 @@ public enum PlanNoteKind
     /// <summary>Blocks: the target's node has another document type, which an update can't change.</summary>
     DocumentTypeDiffers,
 
+    /// <summary>Blocks: the target's media item has another media type, which an update can't change.</summary>
+    MediaTypeDiffers,
+
     /// <summary>Conflict: no copy of ours to go by, so the target's version may be someone's work.</summary>
     NoBaseline,
 

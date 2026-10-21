@@ -7,7 +7,8 @@ using Neirijnck.Transfr.Core.Schema;
 namespace Neirijnck.Transfr.Core.Tests.Planning;
 
 /// <summary>
-/// Documents in the <c>GET document/{id}</c> shape measured on an Umbraco 17.7.0 test site (see Fixtures/document-*.json).
+/// Documents and media items in the <c>GET document/{id}</c> and <c>GET media/{id}</c> shapes measured on an Umbraco 17.7.0
+/// test site (see Fixtures/document-*.json and Fixtures/media-*.json).
 /// </summary>
 public sealed class CopyPlannerTests
 {
@@ -24,6 +25,9 @@ public sealed class CopyPlannerTests
     private static readonly Guid Nested = new("77777777-7777-4777-8777-777777777777");
     private static readonly Guid Blue = new("88888888-8888-4888-8888-888888888888");
     private static readonly Guid Member = new("99999999-9999-4999-8999-999999999999");
+    private static readonly Guid ImageType = new("cc07b313-0843-4aa8-bbda-871c8da728c8");
+    private static readonly Guid FolderType = new("f38bd2d7-65d0-48e6-95dc-87ce06ec2d3d");
+    private static readonly Guid FileType = new("4c52d8ab-54e6-40cd-999c-7a5f24903e4d");
 
     private static string Document(
         Guid? documentType = null,
@@ -75,6 +79,30 @@ public sealed class CopyPlannerTests
         }.ToJsonString();
     }
 
+    private static string MediaJson(Guid? mediaType = null, string src = "/media/abcd1234/blue.png", string updateDate = Updated, string name = "Blue")
+        => new JsonObject
+        {
+            ["isTrashed"] = false,
+            ["mediaType"] = new JsonObject { ["id"] = (mediaType ?? ImageType).ToString(), ["icon"] = "icon-picture" },
+            ["values"] = mediaType == FolderType
+                ? new JsonArray()
+                : new JsonArray(Value("umbracoFile", "Umbraco.ImageCropper", new JsonObject { ["focalPoint"] = null, ["crops"] = new JsonArray(), ["src"] = src })),
+            ["variants"] = new JsonArray(new JsonObject { ["createDate"] = Updated, ["updateDate"] = updateDate, ["culture"] = null, ["segment"] = null, ["name"] = name }),
+        }.ToJsonString();
+
+    private static LocalMediaItem Image(Guid key, Guid? parentKey, string name = "Blue") => new(key, parentKey, name, MediaJson(name: name));
+
+    private static LocalMediaItem Folder(Guid key, Guid? parentKey, string name) => new(key, parentKey, name, MediaJson(FolderType, name: name));
+
+    private static void AssertRow(PlanRow row, PlanOutcome outcome, params PlanNote[] notes)
+    {
+        Assert.Equal(outcome, row.Outcome);
+        Assert.Equal(notes, row.Notes);
+    }
+
+    // The target's copy of a media item, outside its recycle bin.
+    private static TargetMediaItem There(Guid? parentKey, string? json = null) => new(parentKey, false, json);
+
     private static JsonObject Value(string alias, string editorAlias, JsonNode? value)
         => new() { ["editorAlias"] = editorAlias, ["alias"] = alias, ["culture"] = null, ["segment"] = null, ["value"] = value };
 
@@ -99,7 +127,8 @@ public sealed class CopyPlannerTests
         LocalSibling[]? localSiblings = null,
         SchemaCheck[]? schema = null,
         LocalMediaItem[]? localMedia = null,
-        Guid[]? mediaOnTarget = null,
+        Dictionary<Guid, TargetMediaItem>? targetMedia = null,
+        SchemaCheck[]? mediaSchema = null,
         Dictionary<Guid, DateTimeOffset>? baseline = null)
         => new()
         {
@@ -109,9 +138,10 @@ public sealed class CopyPlannerTests
             PublishedOnTarget = (published ?? onTarget ?? [Home]).ToHashSet(),
             TargetSiblings = siblings ?? [],
             LocalSiblings = localSiblings ?? [],
-            Schema = (schema ?? [Ok(PageType), Ok(OtherType)]).ToDictionary(check => check.DocumentTypeKey),
+            Schema = (schema ?? [Ok(PageType), Ok(OtherType)]).ToDictionary(check => check.TypeKey),
             LocalMedia = (localMedia ?? []).ToDictionary(item => item.Key),
-            MediaOnTarget = (mediaOnTarget ?? []).ToHashSet(),
+            TargetMedia = targetMedia ?? [],
+            MediaSchema = (mediaSchema ?? [Ok(ImageType), Ok(FolderType)]).ToDictionary(check => check.TypeKey),
             Baseline = baseline ?? [],
         };
 
@@ -453,15 +483,17 @@ public sealed class CopyPlannerTests
     {
         var rows = CopyPlanner.Plan(Facts(
             [Source(Page, Document(image: Blue), Home), Source(Other, Document(image: Blue), Home, "Other")],
-            localMedia: [new LocalMediaItem(Images, null, "Images"), new LocalMediaItem(Nested, Images, "Nested"), new LocalMediaItem(Blue, Nested, "Blue")],
-            mediaOnTarget: [Images]));
+            localMedia: [Folder(Images, null, "Images"), Folder(Nested, Images, "Nested"), Image(Blue, Nested)],
+            targetMedia: new() { [Images] = There(null) }));
 
         Assert.Equal(
             [(PlanItemKind.Media, Nested), (PlanItemKind.Media, Blue), (PlanItemKind.Document, Page), (PlanItemKind.Document, Other)],
             rows.Select(row => (row.Kind, row.Key)));
         Assert.All(rows, row => Assert.Equal(PlanOutcome.Create, row.Outcome));
         Assert.Equal(Images, RowOf(rows, Nested).ParentKey);
-        Assert.Null(RowOf(rows, Blue).DocumentTypeKey);
+        Assert.Equal(ImageType, RowOf(rows, Blue).DocumentTypeKey);
+        Assert.Equal(FolderType, RowOf(rows, Nested).DocumentTypeKey);
+        Assert.All(rows.Where(row => row.Kind == PlanItemKind.Media), row => Assert.EndsWith("|absent", row.Fingerprint, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -470,7 +502,7 @@ public sealed class CopyPlannerTests
         var rows = CopyPlanner.Plan(Facts(
             [Source(Page, Document(image: Blue), Home), Source(Other, Document(image: Blue, member: Member), Home, "Other")],
             targets: new() { [Page] = new(Home, Document(image: Blue)) },
-            localMedia: [new LocalMediaItem(Blue, null, "Blue")]));
+            localMedia: [Image(Blue, null)]));
 
         Assert.DoesNotContain(rows, row => row.Kind == PlanItemKind.Media);
     }
@@ -487,7 +519,7 @@ public sealed class CopyPlannerTests
     [Fact]
     public void Plan_RefusesAMediaChainWithAMissingFolder()
     {
-        var facts = Facts([Source(Page, Document(image: Blue), Home)], localMedia: [new LocalMediaItem(Blue, Nested, "Blue")]);
+        var facts = Facts([Source(Page, Document(image: Blue), Home)], localMedia: [Image(Blue, Nested)]);
 
         Assert.Throws<ArgumentException>(() => CopyPlanner.Plan(facts));
     }
@@ -641,10 +673,126 @@ public sealed class CopyPlannerTests
         var facts = (params FieldChoice[] fields) => Facts(
             [Source(Page, Document(title: "New", image: Blue), Home, fields: fields)],
             targets: new() { [Page] = new(Home, Document(title: "Old")) },
-            localMedia: [new LocalMediaItem(Blue, null, "Blue")],
+            localMedia: [Image(Blue, null)],
             baseline: CopiedAsIs(Page));
 
         Assert.DoesNotContain(CopyPlanner.Plan(facts(ValueOf("title"))), row => row.Kind == PlanItemKind.Media);
         Assert.Contains(CopyPlanner.Plan(facts(ValueOf("image"))), row => row is { Kind: PlanItemKind.Media, Key: var key } && key == Blue);
+    }
+
+    [Fact]
+    public void Plan_ComparesReferencedMediaTheTargetHas_AndLeavesItsFoldersAlone()
+    {
+        var rows = CopyPlanner.Plan(Facts(
+            [Source(Page, Document(image: Blue), Home)],
+            localMedia: [Folder(Images, null, "Images"), Image(Blue, Images)],
+            targetMedia: new() { [Images] = There(null), [Blue] = There(Images, MediaJson()) }));
+
+        var media = Assert.Single(rows, row => row.Kind == PlanItemKind.Media);
+        Assert.Equal((Blue, PlanOutcome.Unchanged), (media.Key, media.Outcome));
+        Assert.Empty(media.Notes);
+        Assert.Empty(media.Differences);
+        Assert.Equal($"{DateTimeOffset.Parse(Updated, CultureInfo.InvariantCulture):O}|{DateTimeOffset.Parse(Updated, CultureInfo.InvariantCulture):O}", media.Fingerprint);
+    }
+
+    [Fact]
+    public void Plan_UpdatesMediaTheTargetHasAsOurLastCopyLeftIt_ElseItIsAConflict()
+    {
+        var facts = (Dictionary<Guid, DateTimeOffset> baseline) => Facts(
+            [Source(Page, Document(image: Blue), Home)],
+            localMedia: [Image(Blue, null)],
+            targetMedia: new() { [Blue] = There(null, MediaJson(src: "/media/abcd1234/old-blue.png")) },
+            baseline: baseline);
+
+        var update = RowOf(CopyPlanner.Plan(facts(CopiedAsIs(Blue))), Blue);
+        var noBaseline = RowOf(CopyPlanner.Plan(facts([])), Blue);
+        var changed = RowOf(CopyPlanner.Plan(facts(new() { [Blue] = DateTimeOffset.Parse("2026-10-01T10:00:00+02:00", CultureInfo.InvariantCulture) })), Blue);
+
+        AssertRow(update, PlanOutcome.Update);
+        Assert.Equal([new ContentDifference(ContentDifferenceKind.Value, "umbracoFile")], update.Differences);
+        AssertRow(noBaseline, PlanOutcome.Conflict, new PlanNote(PlanNoteKind.NoBaseline));
+        AssertRow(changed, PlanOutcome.Conflict, new PlanNote(PlanNoteKind.ChangedSinceLastCopy));
+    }
+
+    [Fact]
+    public void Plan_BlocksMediaInTheTargetsRecycleBin_WithoutBlockingTheDocument()
+    {
+        var rows = CopyPlanner.Plan(Facts(
+            [Source(Page, Document(image: Blue), Home)],
+            localMedia: [Folder(Images, null, "Images"), Image(Blue, Images)],
+            targetMedia: new() { [Blue] = new TargetMediaItem(null, true, null) }));
+
+        // Its folder is not created for it either.
+        Assert.Equal([Blue], rows.Where(row => row.Kind == PlanItemKind.Media).Select(row => row.Key));
+        AssertRow(RowOf(rows, Blue), PlanOutcome.Blocked, new PlanNote(PlanNoteKind.TrashedOnTarget));
+        Assert.Equal(PlanOutcome.Create, RowOf(rows, Page).Outcome);
+    }
+
+    [Fact]
+    public void Plan_BlocksWhatWouldGoUnderAFolderInTheTargetsRecycleBin()
+    {
+        var rows = CopyPlanner.Plan(Facts(
+            [Source(Page, Document(image: Blue), Home)],
+            localMedia: [Folder(Images, null, "Images"), Folder(Nested, Images, "Nested"), Image(Blue, Nested)],
+            targetMedia: new() { [Images] = new TargetMediaItem(null, true, null) }));
+
+        Assert.Equal(
+            [
+                (Images, PlanOutcome.Blocked, new PlanNote(PlanNoteKind.TrashedOnTarget)),
+                (Nested, PlanOutcome.Blocked, new PlanNote(PlanNoteKind.ParentBlocked, Images)),
+                (Blue, PlanOutcome.Blocked, new PlanNote(PlanNoteKind.ParentBlocked, Nested)),
+            ],
+            rows.Where(row => row.Kind == PlanItemKind.Media).Select(row => (row.Key, row.Outcome, Assert.Single(row.Notes))));
+    }
+
+    [Fact]
+    public void Plan_BlocksMediaOfAnotherMediaTypeOnTheTarget()
+    {
+        var row = RowOf(
+            CopyPlanner.Plan(Facts(
+                [Source(Page, Document(image: Blue), Home)],
+                localMedia: [Image(Blue, null)],
+                targetMedia: new() { [Blue] = There(null, MediaJson(FileType)) })),
+            Blue);
+
+        AssertRow(row, PlanOutcome.Blocked, new PlanNote(PlanNoteKind.MediaTypeDiffers, FileType));
+    }
+
+    [Fact]
+    public void Plan_BlocksMediaWhoseSchemaDiffers_AndWhatAFolderOfSuchATypeWouldHold()
+    {
+        var problem = new SchemaProblem(SchemaItemKind.MediaType, FolderType, "Folder", false, SchemaProblemReason.Differs, ["allowed child types differ"]);
+        var rows = CopyPlanner.Plan(Facts(
+            [Source(Page, Document(image: Blue), Home)],
+            localMedia: [Folder(Images, null, "Images"), Image(Blue, Images)],
+            mediaSchema: [Ok(ImageType), new SchemaCheck(FolderType, [problem])]));
+
+        AssertRow(RowOf(rows, Images), PlanOutcome.Blocked, new PlanNote(PlanNoteKind.SchemaMismatch, FolderType));
+        Assert.Equal([problem], RowOf(rows, Images).SchemaProblems);
+        AssertRow(RowOf(rows, Blue), PlanOutcome.Blocked, new PlanNote(PlanNoteKind.ParentBlocked, Images));
+    }
+
+    [Fact]
+    public void Plan_UpdatesMediaWhereItIsOnTheTarget_AndSaysItIsNotMoved()
+    {
+        var rows = CopyPlanner.Plan(Facts(
+            [Source(Page, Document(image: Blue), Home)],
+            localMedia: [Folder(Images, null, "Images"), Image(Blue, Images)],
+            targetMedia: new() { [Blue] = There(Nested, MediaJson(name: "Blue (B)")) },
+            baseline: CopiedAsIs(Blue)));
+
+        // The folder here is not on the target, but the item is: it is updated where it is, and no folder is created.
+        var media = Assert.Single(rows, row => row.Kind == PlanItemKind.Media);
+        Assert.Equal((Blue, PlanOutcome.Update), (media.Key, media.Outcome));
+        Assert.Equal([new PlanNote(PlanNoteKind.UnderAnotherParentOnTarget, Nested)], media.Notes);
+        Assert.Equal([new ContentDifference(ContentDifferenceKind.Name)], media.Differences);
+    }
+
+    [Fact]
+    public void Plan_RefusesMediaFactsItCantDecideOn()
+    {
+        // A referenced item on the target without its JSON, and a media type without a schema check.
+        Assert.Throws<ArgumentException>(() => CopyPlanner.Plan(Facts([Source(Page, Document(image: Blue), Home)], localMedia: [Image(Blue, null)], targetMedia: new() { [Blue] = There(null) })));
+        Assert.Throws<ArgumentException>(() => CopyPlanner.Plan(Facts([Source(Page, Document(image: Blue), Home)], localMedia: [Image(Blue, null)], mediaSchema: [Ok(FolderType)])));
     }
 }

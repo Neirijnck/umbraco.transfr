@@ -50,10 +50,13 @@ public sealed class PlanCheckTests
     }
 
     [Fact]
-    public void Compare_LeavesMediaRowsOut()
+    public void Compare_ChecksMediaRowsLikeDocuments()
     {
-        var media = new PlanRow(PlanItemKind.Media, M, null, "Blue", null, PlanOutcome.Create, [], [], [], []);
+        // Media are written too, so a media item saved on either side since the dry run refuses the transfer.
+        var media = new PlanRow(PlanItemKind.Media, M, null, "Blue", null, PlanOutcome.Update, [], [], [], [], "2|3");
 
-        Assert.Empty(PlanCheck.Compare([media, Document(A, PlanOutcome.Create, "1|absent")], [new(A, PlanOutcome.Create, "1|absent")]));
+        Assert.Empty(PlanCheck.Compare([media], [new(M, PlanOutcome.Update, "2|3")]));
+        Assert.Equal([PlanDriftReason.Saved], PlanCheck.Compare([media], [new(M, PlanOutcome.Update, "2|1")]).Select(drift => drift.Reason));
+        Assert.Equal([PlanDriftReason.NotInDryRun], PlanCheck.Compare([media], []).Select(drift => drift.Reason));
     }
 }

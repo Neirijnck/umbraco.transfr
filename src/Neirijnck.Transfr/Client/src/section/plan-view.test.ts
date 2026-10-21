@@ -144,4 +144,14 @@ describe('describeNote', () => {
   ])('describes %o', (input, expected) => {
     expect(describeNote(input, 'B')).toBe(expected);
   });
+
+  it.each([
+    [note('ParentBlocked', { name: 'Images' }), 'Its folder "Images" can\'t be copied.'],
+    [note('UnderAnotherParentOnTarget'), 'It is in another folder on B: updated there, not moved.'],
+    [note('UnderAnotherParentOnTarget', { name: 'Logos' }), 'It is in "Logos" on B: updated there, not moved.'],
+    [note('MediaTypeDiffers', { name: 'File' }), 'It has another media type on B ("File").'],
+    [note('TrashedOnTarget'), 'It is in the recycle bin on B.'],
+  ])('describes %o on a media row', (input, expected) => {
+    expect(describeNote(input, 'B', 'Media')).toBe(expected);
+  });
 });

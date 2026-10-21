@@ -1,4 +1,5 @@
-﻿using Neirijnck.Transfr.Core.Remote;
+﻿using Neirijnck.Transfr.Core.Planning;
+using Neirijnck.Transfr.Core.Remote;
 using Neirijnck.Transfr.Local;
 using Neirijnck.Transfr.Persistence;
 using Umbraco.Cms.Core.Services;
@@ -6,7 +7,7 @@ using Umbraco.Cms.Core.Services;
 namespace Neirijnck.Transfr.History;
 
 /// <summary>
-/// Reads the transfers from here to a remote a page at a time, with the names of the users and documents here.
+/// Reads the transfers from here to a remote a page at a time, with the names of the users, documents and media here.
 /// </summary>
 public sealed class TransferHistoryService
 {
@@ -31,15 +32,20 @@ public sealed class TransferHistoryService
         var userKeys = transfers.Select(transfer => transfer.UserKey).Distinct().ToList();
         var users = userKeys.Count == 0 ? [] : await this.userService.GetAsync(userKeys);
 
-        // Documents deleted or in the recycle bin here since have no name.
-        var documentKeys = transfers.SelectMany(transfer => transfer.Documents).Select(document => document.DocumentKey).Distinct().ToList();
+        // Documents and media deleted or in the recycle bin here since have no name.
+        var entries = transfers.SelectMany(transfer => transfer.Documents).ToList();
         var culture = await this.languageService.GetDefaultIsoCodeAsync();
-        var documents = this.localTree.Describe(documentKeys, culture);
+        List<Guid> KeysOf(PlanItemKind kind) => entries.Where(entry => entry.Kind == kind).Select(entry => entry.DocumentKey).Distinct().ToList();
+        var names = this.localTree.Describe(KeysOf(PlanItemKind.Document), culture).ToDictionary(pair => pair.Key, pair => pair.Value.Name);
+        foreach (var (key, name) in this.localTree.MediaNames(KeysOf(PlanItemKind.Media)))
+        {
+            names[key] = name;
+        }
 
         return new TransferHistoryPage(
             transfers,
             nextBefore,
             users.ToDictionary(user => user.Key, user => user.Name ?? string.Empty),
-            documents.ToDictionary(pair => pair.Key, pair => pair.Value.Name));
+            names);
     }
 }

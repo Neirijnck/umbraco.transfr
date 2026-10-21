@@ -190,18 +190,21 @@ export class TransfrHistoryElement extends UmbLitElement {
             (document) => document.key,
             (document) => html`
               <li>
-                <umb-icon name="icon-document"></umb-icon>
+                <umb-icon name=${document.kind === 'Media' ? 'icon-picture' : 'icon-document'}></umb-icon>
                 ${
-                  document.name
-                    ? html`<button
-                        type="button"
-                        class="name"
-                        title="Compare with the remote"
-                        @click=${() => this.#openDiff(document)}
-                      >
-                        ${document.name}
-                      </button>`
-                    : html`<span class="gone">No longer here</span> <small>${document.key}</small>`
+                  document.name && document.kind === 'Media'
+                    ? // Media have no diff panel yet: plain text, not styled like the clickable page names.
+                      html`<span>${document.name}</span>`
+                    : document.name
+                      ? html`<button
+                          type="button"
+                          class="name"
+                          title="Compare with the remote"
+                          @click=${() => this.#openDiff(document)}
+                        >
+                          ${document.name}
+                        </button>`
+                      : html`<span class="gone">No longer here</span> <small>${document.key}</small>`
                 }
                 <uui-tag look="secondary">${outcomeWord(document.outcome)}</uui-tag>
               </li>

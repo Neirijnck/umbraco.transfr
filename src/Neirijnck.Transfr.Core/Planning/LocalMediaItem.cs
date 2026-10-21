@@ -6,4 +6,5 @@
 /// <param name="Key">Its key.</param>
 /// <param name="ParentKey">Its parent folder (null = root).</param>
 /// <param name="Name">Its name.</param>
-public sealed record LocalMediaItem(Guid Key, Guid? ParentKey, string Name);
+/// <param name="Json">Its <c>GET media/{id}</c> JSON.</param>
+public sealed record LocalMediaItem(Guid Key, Guid? ParentKey, string Name, string Json);

@@ -11,5 +11,5 @@ public sealed record PlanNote(PlanNoteKind Kind, Guid? Key = null, string? Prope
 {
     public bool Blocks => this.Kind is PlanNoteKind.SchemaMismatch or PlanNoteKind.ParentMissingOnTarget or PlanNoteKind.ParentBlocked
         or PlanNoteKind.MissingReference or PlanNoteKind.MemberReference or PlanNoteKind.SameNameOtherKey
-        or PlanNoteKind.TrashedOnTarget or PlanNoteKind.DocumentTypeDiffers;
+        or PlanNoteKind.TrashedOnTarget or PlanNoteKind.DocumentTypeDiffers or PlanNoteKind.MediaTypeDiffers;
 }

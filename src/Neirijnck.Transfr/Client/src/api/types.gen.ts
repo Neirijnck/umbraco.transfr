@@ -202,6 +202,7 @@ export type TransferHistoryDocumentResponseModel = {
     key: string;
     name?: string | null;
     outcome: string;
+    kind: string;
 };
 
 export type TransferHistoryItemResponseModel = {

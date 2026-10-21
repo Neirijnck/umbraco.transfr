@@ -5,7 +5,8 @@
 /// Conflict or Blocked. PublishCultures are the cultures published after writing (null = invariant content; empty =
 /// saved only). Differences and SchemaProblems are empty when there are none. ChangedOnRemote is set for a conflict
 /// whose last change on the remote could be read; LastCopied for a document copied to this remote before. Fields is
-/// set for a field-level copy: only those fields are carried over (and Differences are theirs).
+/// set for a field-level copy: only those fields are carried over (and Differences are theirs). DocumentTypeName is the
+/// media type's name for a media item.
 /// </summary>
 public sealed record PlanRowResponseModel(
     string Kind,

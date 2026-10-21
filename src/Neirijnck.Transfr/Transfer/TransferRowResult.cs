@@ -22,7 +22,4 @@ public enum TransferRowResult
 
     /// <summary>Not written because an earlier row failed.</summary>
     NotRun,
-
-    /// <summary>A media item: copying media comes later.</summary>
-    MediaLater,
 }

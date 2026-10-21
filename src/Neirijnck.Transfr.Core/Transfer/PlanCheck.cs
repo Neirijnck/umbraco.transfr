@@ -3,9 +3,8 @@
 namespace Neirijnck.Transfr.Core.Transfer;
 
 /// <summary>
-/// A transfer only carries out what its dry run showed: it plans again and compares document by document. Any drift
-/// refuses the whole transfer, so nothing is written on the strength of an outdated overview. Media rows aren't
-/// compared: nothing writes media yet.
+/// A transfer only carries out what its dry run showed: it plans again and compares row by row, documents and media
+/// alike. Any drift refuses the whole transfer, so nothing is written on the strength of an outdated overview.
 /// </summary>
 public static class PlanCheck
 {
@@ -22,8 +21,7 @@ public static class PlanCheck
         }
 
         var drift = new List<PlanDrift>();
-        var documents = plan.Where(row => row.Kind == PlanItemKind.Document).ToList();
-        foreach (var row in documents)
+        foreach (var row in plan)
         {
             if (!shown.TryGetValue(row.Key, out var before))
             {
@@ -39,7 +37,7 @@ public static class PlanCheck
             }
         }
 
-        var planned = documents.Select(row => row.Key).ToHashSet();
+        var planned = plan.Select(row => row.Key).ToHashSet();
         drift.AddRange(shown.Values
             .Where(row => !planned.Contains(row.Key))
             .Select(row => new PlanDrift(row.Key, null, PlanDriftReason.NoLongerPlanned, row.Outcome, null)));

@@ -63,6 +63,24 @@ public static class ManagementApiTreeParser
                     IsPublished(item)));
     }
 
+    /// <summary>
+    /// Where the requested media items (<c>item/media</c>) are, keeping the trashed ones: a key that is in the recycle bin
+    /// can't be created again (measured: a create with that key is refused), so it must not count as missing. The parent of
+    /// a trashed item (the recycle bin) is left out.
+    /// </summary>
+    public static IReadOnlyDictionary<Guid, (Guid? ParentKey, bool IsTrashed)> ParseMediaItems(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        return document.RootElement
+            .EnumerateArray()
+            .ToDictionary(
+                item => item.GetProperty("id").GetGuid(),
+                item => item.GetProperty("isTrashed").GetBoolean()
+                    ? ((Guid?)null, true)
+                    : (item.GetProperty("parent") is { ValueKind: JsonValueKind.Object } parent ? parent.GetProperty("id").GetGuid() : null, false));
+    }
+
     private static bool IsPublished(JsonElement item)
         => item.TryGetProperty("variants", out var variants)
             && variants.ValueKind == JsonValueKind.Array

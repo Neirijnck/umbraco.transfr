@@ -22,9 +22,14 @@ public static class RemoteRequestPolicy
         new("GET", ApiBase + "/data-type/{id}"),
         new("GET", ApiBase + "/item/document-type/search"),
 
+        // Media the copied documents reference: each one, to compare it, and its media type, for the schema check.
+        new("GET", ApiBase + "/media/{id}"),
+        new("GET", ApiBase + "/media-type/{id}"),
+
         // Who last changed a document there, for a conflict: its audit log and the users' names. item/user reads names
         // only; every other user endpoint stays out.
         new("GET", ApiBase + "/document/{id}/audit-log"),
+        new("GET", ApiBase + "/media/{id}/audit-log"),
         new("GET", ApiBase + "/item/user"),
 
         // Writes, for a transfer: create or update a document (publishing its cultures in the same request), and sort
@@ -34,6 +39,12 @@ public static class RemoteRequestPolicy
         new("PUT", ApiBase + "/document/{id}"),
         new("PUT", ApiBase + "/document/{id}/update-and-publish"),
         new("PUT", ApiBase + "/document/sort"),
+
+        // Writes, for media: upload a file as a temporary file, then create or update the media item naming it. Nothing
+        // that deletes or moves media (the API user can, as media have no granular permissions: this list is the guard).
+        new("POST", ApiBase + "/temporary-file"),
+        new("POST", ApiBase + "/media"),
+        new("PUT", ApiBase + "/media/{id}"),
     ];
 
     /// <summary>

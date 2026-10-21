@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanRowResponseModel, TransferResponseModel, TransferRowResponseModel } from '../api/index.js';
-import { countWrites, describeDrift, describeTransfer, resultLook, toDryRun, wroteAnything } from './transfer-view.js';
+import {
+  countWrites,
+  describeDrift,
+  describeTransfer,
+  describeWrites,
+  resultLook,
+  toDryRun,
+  wroteAnything,
+} from './transfer-view.js';
 
 const row = (key: string, outcome: string, kind = 'Document'): PlanRowResponseModel => ({
   kind,
@@ -33,9 +41,10 @@ const response = (status: string, rows: Array<TransferRowResponseModel>, sortedP
 });
 
 describe('toDryRun', () => {
-  it('sends back the document rows with outcome and fingerprint, not media', () => {
-    expect(toDryRun([row('a', 'Create'), row('m', 'Create', 'Media')])).toEqual([
+  it('sends back every row with outcome and fingerprint, media included', () => {
+    expect(toDryRun([row('a', 'Create'), row('m', 'Update', 'Media')])).toEqual([
       { key: 'a', outcome: 'Create', fingerprint: 'a|absent' },
+      { key: 'm', outcome: 'Update', fingerprint: null },
     ]);
   });
 });
@@ -50,18 +59,31 @@ describe('countWrites', () => {
       row('e', 'Unchanged'),
     ];
     expect(countWrites(rows, new Set(['c']))).toBe(3);
-    expect(countWrites([row('m', 'Create', 'Media')], new Set())).toBe(0);
+    expect(countWrites([row('m', 'Create', 'Media'), row('n', 'Conflict', 'Media')], new Set(['n']))).toBe(2);
+  });
+});
+
+describe('describeWrites', () => {
+  it('names the nodes and media items a transfer would write', () => {
+    const rows = [
+      row('a', 'Update'),
+      row('m', 'Create', 'Media'),
+      row('n', 'Conflict', 'Media'),
+      row('u', 'Unchanged', 'Media'),
+    ];
+    expect(describeWrites(rows, new Set())).toBe('1 node and 1 media item');
+    expect(describeWrites(rows, new Set(['n']))).toBe('1 node and 2 media items');
+    expect(describeWrites([row('e', 'Unchanged')], new Set())).toBe('0 nodes');
   });
 });
 
 describe('resultLook', () => {
   it('names every result and never shows an unknown one as harmless', () => {
-    expect(['Written', 'Skipped', 'Failed', 'NotRun', 'MediaLater'].map((value) => resultLook(value).label)).toEqual([
+    expect(['Written', 'Skipped', 'Failed', 'NotRun'].map((value) => resultLook(value).label)).toEqual([
       'Written',
       'Skipped: conflict',
       'Failed',
       'Not run',
-      'Media: later',
     ]);
     expect(resultLook('Deleted')).toMatchObject({ label: 'Deleted', color: 'danger' });
   });
@@ -105,6 +127,13 @@ describe('describeTransfer', () => {
     );
     expect(describeTransfer(response('Failed', [result('a', 'Failed')]), 'B')).toBe(
       'Stopped at a failure. Nothing was copied.',
+    );
+  });
+
+  it('counts media items apart from nodes', () => {
+    const media = { ...result('m', 'Written'), kind: 'Media' };
+    expect(describeTransfer(response('Completed', [result('a', 'Written'), media]), 'B')).toBe(
+      'Copied 1 node and 1 media item to B.',
     );
   });
 

@@ -1,5 +1,4 @@
-﻿using Neirijnck.Transfr.Core.Planning;
-using Neirijnck.Transfr.Core.Tree;
+﻿using Neirijnck.Transfr.Core.Tree;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.Entities;
 using Umbraco.Cms.Core.Services;
@@ -94,15 +93,15 @@ public sealed class LocalTreeReader
     /// <summary>
     /// These media items here and every folder above them, by key. Unknown and trashed items are left out.
     /// </summary>
-    public IReadOnlyDictionary<Guid, LocalMediaItem> MediaChains(IReadOnlyCollection<Guid> keys)
+    public IReadOnlyDictionary<Guid, LocalMediaNode> MediaChains(IReadOnlyCollection<Guid> keys)
     {
-        var items = new Dictionary<Guid, LocalMediaItem>();
+        var items = new Dictionary<Guid, LocalMediaNode>();
         var wanted = keys.ToArray();
         while (wanted.Length > 0)
         {
             var found = this.entityService.GetAll(UmbracoObjectTypes.Media, wanted)
                 .Where(entity => !entity.Trashed)
-                .Select(entity => new LocalMediaItem(entity.Key, this.ParentKeyOf(entity, UmbracoObjectTypes.Media), NameOf(entity, null)))
+                .Select(entity => new LocalMediaNode(entity.Key, this.ParentKeyOf(entity, UmbracoObjectTypes.Media), NameOf(entity, null)))
                 .ToList();
             foreach (var item in found)
             {
@@ -114,6 +113,16 @@ public sealed class LocalTreeReader
 
         return items;
     }
+
+    /// <summary>
+    /// The names of these media items here. Unknown and trashed items are left out.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, string> MediaNames(IReadOnlyCollection<Guid> keys)
+        => keys.Count == 0
+            ? new Dictionary<Guid, string>()
+            : this.entityService.GetAll(UmbracoObjectTypes.Media, keys.ToArray())
+                .Where(entity => !entity.Trashed)
+                .ToDictionary(entity => entity.Key, entity => NameOf(entity, null));
 
     private Guid? ParentKeyOf(IEntitySlim entity, UmbracoObjectTypes objectType)
     {
