@@ -1,10 +1,13 @@
 import { UmbModalToken } from '@umbraco-cms/backoffice/modal';
 import type { PlanSelectionRequestModel, TransferResponseModel } from '../api/index.js';
+import type { Direction } from './direction.js';
 
 export type TransfrCopyPlanModalData = {
-  /** The remote to copy to. */
+  /** The remote to copy to or from. */
   alias: string;
   remoteName: string;
+  /** Which way: to the remote (the default) or from it to here. */
+  direction?: Direction;
   /** The batch: the nodes and media items picked in the trees. */
   selection: Array<PlanSelectionRequestModel>;
   /**

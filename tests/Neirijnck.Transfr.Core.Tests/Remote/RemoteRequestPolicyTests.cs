@@ -34,6 +34,7 @@ public sealed class RemoteRequestPolicyTests
         "POST " + Api + "/temporary-file",
         "POST " + Api + "/media",
         "PUT " + Api + "/media/{id}",
+        "GET /media/{folder}/{file}",
     ];
 
     private static readonly string[] AllowedMethods = ["GET", "POST", "PUT"];
@@ -99,6 +100,9 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("GET", Api + "/document/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/audit-log?orderDirection=Descending&skip=0&take=20")]
     [InlineData("GET", Api + "/item/user?id=3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
     [InlineData("GET", Api + "/media/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b/audit-log?orderDirection=Descending&skip=0&take=20")]
+    [InlineData("GET", "/media/flghoxgj/pink.png")]
+    [InlineData("GET", "/media/uvdl3xtb/Green%20Image.PNG")]
+    [InlineData("GET", "/MEDIA/1001/report.pdf?v=2")]
     public void IsAllowed_AcceptsListedRequests(string method, string path)
     {
         Assert.True(RemoteRequestPolicy.IsAllowed(method, path));
@@ -156,6 +160,18 @@ public sealed class RemoteRequestPolicyTests
     [InlineData("GET", Api + "/tree/media/siblings")]
     [InlineData("GET", Api + "/tree/member/root")]
     [InlineData("DELETE", Api + "/media-type/3f2a1c4e-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    [InlineData("POST", "/media/flghoxgj/pink.png")]
+    [InlineData("PUT", "/media/flghoxgj/pink.png")]
+    [InlineData("GET", "/media/flghoxgj")]
+    [InlineData("GET", "/media")]
+    [InlineData("GET", "/media/flghoxgj/nested/pink.png")]
+    [InlineData("GET", "/media/flghoxgj/..")]
+    [InlineData("GET", "/media/flghoxgj/%2E%2E")]
+    [InlineData("GET", "/media/flghoxgj/..%2Fumbraco.config")]
+    [InlineData("GET", "/media/flghoxgj/..%5Cweb.config")]
+    [InlineData("GET", "/media/fl.ghox/pink.png")]
+    [InlineData("GET", "/media/%2E%2E/pink.png")]
+    [InlineData("GET", "/umbraco/media/flghoxgj/pink.png")]
     public void IsAllowed_RejectsEverythingElse(string method, string path)
     {
         Assert.False(RemoteRequestPolicy.IsAllowed(method, path));

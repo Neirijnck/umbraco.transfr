@@ -1,7 +1,7 @@
 ﻿namespace Neirijnck.Transfr.Core.Planning;
 
 /// <summary>
-/// A media item or folder here.
+/// A media item or folder on the source (the side copied from).
 /// </summary>
 /// <param name="Key">Its key.</param>
 /// <param name="ParentKey">Its parent folder (null = root).</param>

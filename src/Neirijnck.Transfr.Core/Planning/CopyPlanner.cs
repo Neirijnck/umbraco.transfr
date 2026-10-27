@@ -6,9 +6,10 @@ using Neirijnck.Transfr.Core.Schema;
 namespace Neirijnck.Transfr.Core.Planning;
 
 /// <summary>
-/// Builds the dry run of a copy from here to a target: one row per selected document with what the copy would do and
-/// why, plus one per media item picked or referenced by the written documents (after the folders the target lacks for
-/// it), before the documents. Nothing is deleted, unpublished or moved, so a plan never says so: it reports what it leaves alone instead.
+/// Builds the dry run of a copy from a source to a target (either way between here and a remote): one row per selected
+/// document with what the copy would do and why, plus one per media item picked or referenced by the written documents
+/// (after the folders the target lacks for it), before the documents. Nothing is deleted, unpublished or moved, so a
+/// plan never says so: it reports what it leaves alone instead.
 /// </summary>
 public static class CopyPlanner
 {
@@ -64,9 +65,9 @@ public static class CopyPlanner
     }
 
     /// <summary>
-    /// The nodes in each parent's place on the target take their order from here (<see cref="SiblingOrder"/>). A node
-    /// whose predecessor changes gets a note. Skipped conflicts, blocked nodes and nodes under another parent on the
-    /// target don't move (a copy never moves a node to another parent).
+    /// The nodes in each parent's place on the target take their order from the source (<see cref="SiblingOrder"/>). A
+    /// node whose predecessor changes gets a note. Skipped conflicts, blocked nodes and nodes under another parent on
+    /// the target don't move (a copy never moves a node to another parent).
     /// </summary>
     private static List<PlanRow> PlaceAmongSiblings(List<PlanRow> rows, Dictionary<Guid, Source> sources, CopyPlanFacts facts)
     {

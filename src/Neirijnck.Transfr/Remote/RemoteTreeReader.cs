@@ -91,6 +91,23 @@ public sealed class RemoteTreeReader
         CancellationToken cancellationToken)
         => this.ReadItemsAsync(remote, "item/media", keys, ManagementApiTreeParser.ParseMediaItems, cancellationToken);
 
+    /// <summary>
+    /// These documents, or media items for <see cref="PlanItemKind.Media"/>, on the remote with their parent and name.
+    /// Unknown and trashed keys are left out.
+    /// </summary>
+    public Task<(IReadOnlyDictionary<Guid, ItemNode> Items, int Requests)> DescribeAsync(
+        RemoteDefinition remote,
+        IReadOnlyCollection<Guid> keys,
+        string? preferredCulture,
+        PlanItemKind kind,
+        CancellationToken cancellationToken)
+        => this.ReadItemsAsync(
+            remote,
+            kind == PlanItemKind.Media ? "item/media" : "item/document",
+            keys,
+            json => ManagementApiTreeParser.ParseItemNodes(json, preferredCulture),
+            cancellationToken);
+
     private Task<(IReadOnlyDictionary<Guid, ItemLocation> Locations, int Requests)> LocateItemsAsync(
         RemoteDefinition remote,
         string itemPath,

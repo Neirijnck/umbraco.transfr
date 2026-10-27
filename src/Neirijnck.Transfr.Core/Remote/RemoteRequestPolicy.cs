@@ -49,6 +49,10 @@ public static class RemoteRequestPolicy
         new("POST", ApiBase + "/temporary-file"),
         new("POST", ApiBase + "/media"),
         new("PUT", ApiBase + "/media/{id}"),
+
+        // Reading a media item's file, for a transfer from the remote: served at the path its media value names, in the
+        // folder Umbraco's path scheme gives it (one folder, then the file name). Nothing else outside the API.
+        new("GET", "/media/{folder}/{file}"),
     ];
 
     /// <summary>
@@ -75,8 +79,10 @@ public static class RemoteRequestPolicy
 
     /// <summary>
     /// Whether a request may be sent. The query string is ignored; the path must match a template segment by segment
-    /// (case-insensitive), with <c>{id}</c> matching exactly one GUID. Because every segment is compared exactly,
-    /// dot segments, percent-encoding and unlisted methods can never match.
+    /// (case-insensitive), with <c>{id}</c> matching exactly one GUID, <c>{folder}</c> one segment of letters, digits
+    /// and hyphens, and <c>{file}</c> one segment that, decoded, holds no slash or backslash and isn't a dot segment.
+    /// Because every other segment is compared exactly, dot segments, percent-encoding and unlisted methods can never
+    /// match.
     /// </summary>
     public static bool IsAllowed(string method, string pathAndQuery)
     {
@@ -98,9 +104,13 @@ public static class RemoteRequestPolicy
 
         for (var i = 0; i < segments.Length; i++)
         {
-            var matches = templateSegments[i] == "{id}"
-                ? Guid.TryParseExact(segments[i], "D", out _)
-                : string.Equals(templateSegments[i], segments[i], StringComparison.OrdinalIgnoreCase);
+            var matches = templateSegments[i] switch
+            {
+                "{id}" => Guid.TryParseExact(segments[i], "D", out _),
+                "{folder}" => segments[i].All(c => char.IsAsciiLetterOrDigit(c) || c == '-'),
+                "{file}" => IsFileName(Uri.UnescapeDataString(segments[i])),
+                _ => string.Equals(templateSegments[i], segments[i], StringComparison.OrdinalIgnoreCase),
+            };
             if (!matches)
             {
                 return false;
@@ -109,4 +119,7 @@ public static class RemoteRequestPolicy
 
         return true;
     }
+
+    private static bool IsFileName(string name)
+        => name.Length > 0 && name is not ("." or "..") && !name.Contains('/', StringComparison.Ordinal) && !name.Contains('\\', StringComparison.Ordinal);
 }

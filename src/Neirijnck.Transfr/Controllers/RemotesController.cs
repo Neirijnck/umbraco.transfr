@@ -28,7 +28,8 @@ public class RemotesController : TransfrApiControllerBase
     public IActionResult GetRemotes()
         => this.Ok(new RemotesResponseModel(
             this.registry.RuntimeRemotesAllowed,
-            this.registry.GetAll(this.UserKey).Select(ToResponse).ToList()));
+            this.registry.GetAll(this.UserKey).Select(ToResponse).ToList(),
+            this.registry.PullAllowed));
 
     /// <summary>
     /// Connects a remote for the current user: validates it, signs in with its client credentials, and only then keeps

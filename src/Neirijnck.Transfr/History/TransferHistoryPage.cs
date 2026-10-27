@@ -3,7 +3,7 @@
 namespace Neirijnck.Transfr.History;
 
 /// <summary>
-/// A page of transfers to a remote, newest first, with the names the view needs.
+/// A page of transfers with a remote, either way, newest first, with the names the view needs.
 /// </summary>
 /// <param name="Transfers">The transfers on this page.</param>
 /// <param name="NextBefore">The row id to read the next page before (null when this is the last page).</param>

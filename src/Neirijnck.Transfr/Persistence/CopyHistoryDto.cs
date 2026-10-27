@@ -4,8 +4,8 @@ using Umbraco.Cms.Infrastructure.Persistence.DatabaseAnnotations;
 namespace Neirijnck.Transfr.Persistence;
 
 /// <summary>
-/// One document or media item copied by Transfr: the baseline for conflict detection (the target's last save right after
-/// our copy) and the history view. Rows are only ever added.
+/// One document or media item copied by Transfr: the baseline for conflict detection (both sides' last save around our
+/// copy, <see cref="Core.History.CopyBaseline"/>) and the history view. Rows are only ever added.
 /// </summary>
 [TableName(TableName)]
 [PrimaryKey("id", AutoIncrement = true)]
@@ -36,7 +36,7 @@ internal sealed class CopyHistoryDto
     [Constraint(Default = "Document")]
     public string Kind { get; set; } = "Document";
 
-    /// <summary>ToRemote (from here to the remote) or, later, FromRemote.</summary>
+    /// <summary>ToRemote or FromRemote (<see cref="Core.History.CopyDirection"/>).</summary>
     [Column("direction")]
     [Length(20)]
     public string Direction { get; set; } = string.Empty;
@@ -61,4 +61,13 @@ internal sealed class CopyHistoryDto
     [Column("targetUpdateDate")]
     [Length(40)]
     public string TargetUpdateDate { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The source's last save when it was copied, round-trip text like <see cref="TargetUpdateDate"/>: the baseline for a
+    /// later copy the other way. Null on rows recorded before both sides were kept.
+    /// </summary>
+    [Column("sourceUpdateDate")]
+    [Length(40)]
+    [NullSetting(NullSetting = NullSettings.Null)]
+    public string? SourceUpdateDate { get; set; }
 }

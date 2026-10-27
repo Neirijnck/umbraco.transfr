@@ -31,6 +31,7 @@ export type ContentDifferenceResponseModel = {
 
 export type CopyPlanRequestModel = {
     selection: Array<PlanSelectionRequestModel>;
+    direction?: null | string;
 };
 
 export type CopyPlanResponseModel = {
@@ -80,6 +81,7 @@ export type FieldDiffResponseModel = {
 export type LastCopyResponseModel = {
     by: null | string;
     at: string;
+    direction: string;
 };
 
 export type MediaFileDiffResponseModel = {
@@ -169,6 +171,7 @@ export type RemoteResponseModel = {
 export type RemotesResponseModel = {
     allowRuntimeRemotes: boolean;
     remotes: Array<RemoteResponseModel>;
+    allowPull: boolean;
 };
 
 export type RemoteStatusResponseModel = {
@@ -219,6 +222,7 @@ export type TransferHistoryItemResponseModel = {
     at: string;
     by: null | string;
     documents: Array<TransferHistoryDocumentResponseModel>;
+    direction: string;
 };
 
 export type TransferHistoryResponseModel = {
@@ -230,6 +234,7 @@ export type TransferRequestModel = {
     selection: Array<PlanSelectionRequestModel>;
     dryRun: Array<DryRunRowRequestModel>;
     overwrite: Array<string>;
+    direction?: null | string;
 };
 
 export type TransferResponseModel = {

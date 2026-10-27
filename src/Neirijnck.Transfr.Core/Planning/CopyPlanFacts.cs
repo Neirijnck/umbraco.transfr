@@ -4,11 +4,12 @@ namespace Neirijnck.Transfr.Core.Planning;
 
 /// <summary>
 /// Everything <see cref="CopyPlanner"/> decides on, read from both sides beforehand. Documents are the Management API's
-/// <c>GET document/{id}</c> JSON on either side.
+/// <c>GET document/{id}</c> JSON on either side. The source is the side copied from (this environment or the remote,
+/// either way); facts named Local are the source's.
 /// </summary>
 public sealed class CopyPlanFacts
 {
-    /// <summary>The selected documents here, parents before their children.</summary>
+    /// <summary>The selected documents on the source, parents before their children.</summary>
     public required IReadOnlyList<SourceDocument> Sources { get; init; }
 
     /// <summary>The target's copy of a source, by key (trashed ones included); no entry = not on the target.</summary>
@@ -31,7 +32,7 @@ public sealed class CopyPlanFacts
     /// </summary>
     public required IReadOnlyList<TargetSibling> TargetSiblings { get; init; }
 
-    /// <summary>The children here of every source's parent, in sort order.</summary>
+    /// <summary>The children on the source of every source's parent, in sort order.</summary>
     public required IReadOnlyList<LocalSibling> LocalSiblings { get; init; }
 
     /// <summary>The schema check of each source's document type, by document type key.</summary>
@@ -43,7 +44,7 @@ public sealed class CopyPlanFacts
     /// </summary>
     public required IReadOnlyList<Guid> PickedMedia { get; init; }
 
-    /// <summary>Picked and referenced media items here and their ancestors, by key.</summary>
+    /// <summary>Picked and referenced media items on the source and their ancestors, by key.</summary>
     public required IReadOnlyDictionary<Guid, LocalMediaItem> LocalMedia { get; init; }
 
     /// <summary>

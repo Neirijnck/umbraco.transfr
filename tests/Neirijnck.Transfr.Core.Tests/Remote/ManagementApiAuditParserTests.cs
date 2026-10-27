@@ -34,6 +34,19 @@ public sealed class ManagementApiAuditParserTests
         Assert.Null(ManagementApiAuditParser.LatestChange("""{"total":0,"items":[]}"""));
     }
 
+    // The same rule reads this environment's own audit items, by their AuditType name.
+    [Theory]
+    [InlineData("Save", true)]
+    [InlineData("PublishVariant", true)]
+    [InlineData("RollBack", true)]
+    [InlineData("Sort", false)]
+    [InlineData("Move", false)]
+    [InlineData("save", false)]
+    public void IsContentChange_KnowsWhatChangesContent(string logType, bool expected)
+    {
+        Assert.Equal(expected, ManagementApiAuditParser.IsContentChange(logType));
+    }
+
     [Fact]
     public void UserNames_MapsKeysToNames()
     {

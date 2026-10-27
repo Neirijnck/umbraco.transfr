@@ -81,6 +81,26 @@ public static class ManagementApiTreeParser
                     : (item.GetProperty("parent") is { ValueKind: JsonValueKind.Object } parent ? parent.GetProperty("id").GetGuid() : null, false));
     }
 
+    /// <summary>
+    /// The requested documents (<c>item/document</c>) or media items (<c>item/media</c>) with their parent and name, as
+    /// the tree names them. Unknown and trashed items are left out, as in <see cref="ParseItemLocations"/>.
+    /// </summary>
+    /// <param name="json">The response body.</param>
+    /// <param name="preferredCulture">The culture whose name to take for culture-variant documents.</param>
+    public static IReadOnlyDictionary<Guid, ItemNode> ParseItemNodes(string json, string? preferredCulture)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        return document.RootElement
+            .EnumerateArray()
+            .Where(item => !item.GetProperty("isTrashed").GetBoolean())
+            .ToDictionary(
+                item => item.GetProperty("id").GetGuid(),
+                item => new ItemNode(
+                    item.GetProperty("parent") is { ValueKind: JsonValueKind.Object } parent ? parent.GetProperty("id").GetGuid() : null,
+                    NameOf(item, preferredCulture)));
+    }
+
     private static bool IsPublished(JsonElement item)
         => item.TryGetProperty("variants", out var variants)
             && variants.ValueKind == JsonValueKind.Array

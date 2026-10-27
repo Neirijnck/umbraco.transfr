@@ -7,7 +7,7 @@ namespace Neirijnck.Transfr.Core.Transfer;
 
 /// <summary>
 /// The requests that carry out a media row on the target, built from the media item as <c>GET media/{id}</c> returns it
-/// here. Measured in 17.7.0 with the API user: a file goes up as a temporary file and the media value names it
+/// on the source. Measured in 17.7.0 with the API user: a file goes up as a temporary file and the media value names it
 /// (<c>temporaryFileId</c>); a value with only <c>src</c> keeps the file; <c>PUT media/{id}</c> replaces every value (one
 /// left out is cleared, and a file left out stays on disk), so every value is always sent.
 /// </summary>
@@ -24,7 +24,7 @@ public static class MediaTransferRequests
     /// file name).
     /// </summary>
     /// <param name="row">A media row to create, update, or overwrite as a conflict.</param>
-    /// <param name="sourceJson">The media item here.</param>
+    /// <param name="sourceJson">The media item on the source.</param>
     /// <param name="targetJson">The target's media item, for an update or a conflict.</param>
     /// <param name="newId">Gives each upload its temporary file id.</param>
     /// <exception cref="ArgumentException">
@@ -60,11 +60,11 @@ public static class MediaTransferRequests
         foreach (var (key, value) in DocumentJson.Entries(source["values"], withAlias: true))
         {
             var copy = (JsonObject)value.DeepClone();
-            // A file value is { src, ... } here, { temporaryFileId, ... } to upload a new one.
+            // A file value is { src, ... } on the source, { temporaryFileId, ... } to upload a new one.
             var src = MediaFiles.IsFile(value) ? MediaFiles.SrcOf(value) : null;
             var targetSrc = MediaFiles.SrcOf(targetValues.FirstOrDefault(entry => entry.Key == key).Entry);
 
-            // An empty file here is sent as it is: that clears the file there too.
+            // An empty file on the source is sent as it is: that clears the file there too.
             if (!string.IsNullOrEmpty(src) && (labelsDiffer || !string.Equals(src, targetSrc, StringComparison.Ordinal)))
             {
                 var upload = new MediaUpload(newId(), src, Uri.UnescapeDataString(src[(src.LastIndexOf('/') + 1)..]));
@@ -105,9 +105,9 @@ public static class MediaTransferRequests
     }
 
     /// <summary>
-    /// The file values that didn't arrive: a file here whose value on the target, read back after the write, has no path.
-    /// Umbraco saves an uploaded file it refuses (a disallowed extension, an unsafe file) as an empty path and still
-    /// answers with success, so only reading back tells.
+    /// The file values that didn't arrive: a file on the source whose value on the target, read back after the write, has
+    /// no path. Umbraco saves an uploaded file it refuses (a disallowed extension, an unsafe file) as an empty path and
+    /// still answers with success, so only reading back tells.
     /// </summary>
     /// <returns>The aliases of the file values that came out empty there; empty when every file arrived.</returns>
     public static IReadOnlyList<string> MissingFiles(string sourceJson, string writtenJson)

@@ -122,6 +122,12 @@ describe('describeTransfer', () => {
     );
   });
 
+  it('says from the remote for a copy from it', () => {
+    expect(describeTransfer(response('Completed', [result('a', 'Written')]), 'B', 'FromRemote')).toBe(
+      'Copied 1 node from B.',
+    );
+  });
+
   it('says that what was written before a failure stays written', () => {
     expect(
       describeTransfer(

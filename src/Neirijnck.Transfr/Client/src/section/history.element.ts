@@ -29,8 +29,8 @@ type History =
     };
 
 /**
- * History view: the transfers from here to a remote, newest first, as the copy history recorded them (the nodes each
- * one wrote). A node that is still here opens its diff with the remote.
+ * History view: the transfers between here and a remote, either way, newest first, as the copy history recorded them
+ * (the nodes and media items each one wrote). An item that is still here opens its diff with the remote.
  */
 @customElement('transfr-history')
 export class TransfrHistoryElement extends UmbLitElement {
@@ -165,29 +165,29 @@ export class TransfrHistoryElement extends UmbLitElement {
 
     if (history.transfers.length === 0) {
       return html`<uui-box headline="History">
-        <p>Nothing has been copied from here to ${remoteName} yet.</p>
+        <p>Nothing has been copied between here and ${remoteName} yet.</p>
       </uui-box>`;
     }
 
     return html`
-      <p class="intro">Every transfer from here to ${remoteName}, newest first, with the nodes it wrote.</p>
+      <p class="intro">Every transfer between here and ${remoteName}, either way, newest first, with what it wrote.</p>
       <ol class="transfers">
         ${repeat(
           history.transfers,
-          (transfer) => `${transfer.at}/${transfer.by ?? ''}`,
-          (transfer) => this.#renderTransfer(transfer),
+          (transfer) => `${transfer.at}/${transfer.by ?? ''}/${transfer.direction}`,
+          (transfer) => this.#renderTransfer(transfer, remoteName),
         )}
       </ol>
       ${this.#renderMore(history)}
     `;
   }
 
-  #renderTransfer(transfer: TransferHistoryItemResponseModel) {
+  #renderTransfer(transfer: TransferHistoryItemResponseModel, remoteName: string) {
     return html`
       <li class="transfer">
         <div class="head">
           <umb-icon name="icon-history"></umb-icon>
-          <strong>${describeTransferHeadline(transfer)}</strong>
+          <strong>${describeTransferHeadline(transfer, remoteName)}</strong>
           <small>${summarizeTransfer(transfer.documents)}</small>
         </div>
         <ul class="documents">

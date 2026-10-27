@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using System.Text.Json.Nodes;
 using Neirijnck.Transfr.Core.Content;
+using Neirijnck.Transfr.Core.History;
 using Neirijnck.Transfr.Core.Planning;
 using Neirijnck.Transfr.Core.Schema;
 
@@ -207,6 +208,27 @@ public sealed class CopyPlannerTests
 
         Assert.Equal(PlanOutcome.Conflict, row.Outcome);
         Assert.Equal([new PlanNote(PlanNoteKind.ChangedSinceLastCopy)], row.Notes);
+    }
+
+    // Pulling: the source is the remote's document, the target this environment's. A push recorded this side as its
+    // source, so pulling a later remote edit back is an update while this side is as the push left it.
+    [Theory]
+    [InlineData(Updated, PlanOutcome.Update)]
+    [InlineData("2026-10-14T11:00:00+02:00", PlanOutcome.Conflict)]
+    public void Plan_PullingAfterAPush_TakesTheBaselineFromThePushSource(string hereUpdated, PlanOutcome expected)
+    {
+        var push = new RecordedCopy(
+            CopyDirection.ToRemote,
+            TargetUpdate: DateTimeOffset.Parse("2026-10-14T10:30:00+02:00", CultureInfo.InvariantCulture),
+            SourceUpdate: DateTimeOffset.Parse(Updated, CultureInfo.InvariantCulture));
+        var baseline = CopyBaseline.TargetUpdate(push, CopyDirection.FromRemote)!.Value;
+
+        var row = Single(Facts(
+            [Source(Page, Document(title: "Edited on the remote", updateDate: "2026-10-14T12:00:00+02:00"), Home)],
+            targets: new() { [Page] = new(Home, Document(updateDate: hereUpdated)) },
+            baseline: new() { [Page] = baseline }));
+
+        Assert.Equal(expected, row.Outcome);
     }
 
     [Fact]

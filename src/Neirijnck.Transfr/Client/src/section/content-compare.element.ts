@@ -14,6 +14,7 @@ import { umbOpenModal } from '@umbraco-cms/backoffice/modal';
 import { brandStyles } from './brand.js';
 import { describeDifference, summarizeDifferences } from './content-summary.js';
 import { TRANSFR_COPY_PLAN_MODAL } from './copy-plan-modal.token.js';
+import { sidesOf, type Direction } from './direction.js';
 import { describeFields } from './field-picks.js';
 import { TRANSFR_NODE_DIFF_MODAL } from './node-diff-modal.token.js';
 import { problemMessage } from './problem.js';
@@ -79,6 +80,14 @@ export class TransfrContentCompareElement extends UmbLitElement {
   @state()
   private _remotes?: Array<RemoteResponseModel>;
 
+  // Whether copies from a remote to here are allowed here (Transfr:AllowPull): then the direction can be switched.
+  @state()
+  private _allowPull = false;
+
+  // Which way a copy goes: the source's tree gets the ticks, and each direction has its own batch.
+  @state()
+  private _direction: Direction = 'ToRemote';
+
   @state()
   private _alias?: string;
 
@@ -123,6 +132,8 @@ export class TransfrContentCompareElement extends UmbLitElement {
   async #loadRemotes() {
     const { data } = await tryExecute(this, TransfrService.getRemotes());
     this._remotes = (data?.remotes ?? []).filter((remote) => remote.isValid);
+    this._allowPull = data?.allowPull ?? false;
+    this._direction = 'ToRemote';
     this.#selectRemote(this._remotes[0]?.alias);
   }
 
@@ -132,10 +143,24 @@ export class TransfrContentCompareElement extends UmbLitElement {
     this._expanded = new Set();
     this._subtree = undefined;
     this._separateInstall = [];
-    this.#setBatch(alias ? loadBatch(batchStorage(), alias) : EMPTY_BATCH);
+    this.#setBatch(alias ? loadBatch(batchStorage(), alias, this._direction) : EMPTY_BATCH);
     if (alias) {
       void this.#loadLevel(ROOT);
     }
+  }
+
+  // The other direction's batch takes the place of this one's, which stays kept for when it is switched back.
+  #setDirection(direction: Direction) {
+    if (direction === this._direction) {
+      return;
+    }
+    this._direction = direction;
+    this.#setBatch(this._alias ? loadBatch(batchStorage(), this._alias, direction) : EMPTY_BATCH);
+  }
+
+  // The side the ticks are on: where a copy in the current direction reads.
+  get #sourceSide(): Side {
+    return this._direction === 'FromRemote' ? 'remote' : 'local';
   }
 
   // The batch outlives a refresh of the page (per tab, per remote): kept whenever it changes.
@@ -143,7 +168,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
   override updated(changed: PropertyValues) {
     super.updated(changed);
     if ((changed.has('_selection') || changed.has('_others')) && this._alias) {
-      saveBatch(batchStorage(), this._alias, this.#batch());
+      saveBatch(batchStorage(), this._alias, this.#batch(), this._direction);
     }
   }
 
@@ -308,7 +333,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
     }
 
     const pick = this._selection.get(row.key);
-    const canCopy = whyNotSelectable(row, block, this._separateInstall.length > 0) === undefined;
+    const canCopy = whyNotSelectable(row, block, this._separateInstall.length > 0, this._direction) === undefined;
     const remote = this._remotes?.find((candidate) => candidate.alias === alias);
     umbOpenModal(this, TRANSFR_NODE_DIFF_MODAL, {
       data: {
@@ -317,9 +342,9 @@ export class TransfrContentCompareElement extends UmbLitElement {
         key: row.key,
         name: row.local?.name ?? row.remote?.name ?? row.key,
         kind: this.kind,
-        // Media are copied whole: no fields to pick.
+        // Media are copied whole, and a copy from the remote takes whole nodes: no fields to pick then.
         batch:
-          canCopy && this.kind === 'Document'
+          canCopy && this.kind === 'Document' && this._direction === 'ToRemote'
             ? {
                 whole: coveredBy !== undefined || isWhole(pick),
                 fields: pick !== undefined && !isWhole(pick) ? [...pick] : [],
@@ -348,6 +373,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
       data: {
         alias,
         remoteName: remote?.name ?? alias,
+        direction: this._direction,
         selection: batchToRequest(this.#batch()),
         onTransferred: (transfer) => this.#afterTransfer(alias, transfer),
       },
@@ -426,6 +452,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
           }))}
           @change=${(event: Event) => this.#selectRemote((event.target as UUISelectElement).value as string)}
         ></uui-select>
+        ${this.#renderDirection(remote?.name ?? 'the remote')}
         <uui-button look="secondary" label="Refresh" @click=${() => this.#selectRemote(this._alias)}>
           <umb-icon name="icon-refresh"></umb-icon> Refresh
         </uui-button>
@@ -472,6 +499,26 @@ export class TransfrContentCompareElement extends UmbLitElement {
     `;
   }
 
+  // To the remote or from it to here; only where copies from a remote are allowed.
+  #renderDirection(remoteName: string) {
+    if (!this._allowPull) {
+      return nothing;
+    }
+
+    const option = (direction: Direction, label: string, icon: string) =>
+      html`<uui-button
+        look=${this._direction === direction ? 'primary' : 'outline'}
+        aria-pressed=${this._direction === direction ? 'true' : 'false'}
+        label=${label}
+        @click=${() => this.#setDirection(direction)}
+        ><umb-icon name=${icon}></umb-icon> ${label}</uui-button
+      >`;
+    return html`<uui-button-group class="direction" role="group" aria-label="Which way to copy">
+      ${option('ToRemote', `To ${remoteName}`, 'icon-arrow-right')}
+      ${option('FromRemote', `From ${remoteName}`, 'icon-arrow-left')}
+    </uui-button-group>`;
+  }
+
   // What is picked for a copy (in both views), and the way to its dry run. Hidden until something is picked; then it
   // stays in view while the trees scroll.
   #renderSelectionBar(remoteName: string) {
@@ -486,10 +533,10 @@ export class TransfrContentCompareElement extends UmbLitElement {
       <uui-button look="secondary" label="Clear selection" @click=${() => this.#setBatch(EMPTY_BATCH)}></uui-button>
       <uui-button
         look="primary"
-        label=${`Dry run: copy to ${remoteName}`}
+        label=${`Dry run: copy ${sidesOf(this._direction, remoteName).way}`}
         ?disabled=${this._separateInstall.length > 0}
         @click=${() => this.#openPlan()}
-        ><umb-icon name="icon-search"></umb-icon> Dry run: copy to ${remoteName}</uui-button
+        ><umb-icon name="icon-search"></umb-icon> Dry run: copy ${sidesOf(this._direction, remoteName).way}</uui-button
       >
     </div>`;
   }
@@ -673,7 +720,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
 
     return html`
       <div class="cell ${side} ${kind} ${changed ? 'changed' : ''}">
-        ${expander} ${side === 'local' ? this.#renderPick(row, kind, name, block, coveredBy) : nothing}
+        ${expander} ${side === this.#sourceSide ? this.#renderPick(row, kind, name, block, coveredBy) : nothing}
         ${
           node && kind !== 'missing' && kind !== 'elsewhere'
             ? html`
@@ -693,8 +740,8 @@ export class TransfrContentCompareElement extends UmbLitElement {
                       </button>`
                     : html`<span class="name">${node.name}</span>`
                 }
-                ${side === 'local' && node.hasChildren && !coveredBy ? this.#renderBelow(row.key, name) : nothing}
-                ${side === 'local' && !coveredBy ? this.#renderPickedFields(row.key) : nothing}
+                ${side === this.#sourceSide && node.hasChildren && !coveredBy ? this.#renderBelow(row.key, name) : nothing}
+                ${side === this.#sourceSide && !coveredBy ? this.#renderPickedFields(row.key) : nothing}
                 <span class="chips">${this.#renderChips(side, row, kind, known, remoteName, block)}</span>
               `
             : this.#renderPlaceholder(side, row, kind, remoteName)
@@ -717,9 +764,10 @@ export class TransfrContentCompareElement extends UmbLitElement {
     `;
   }
 
-  // A checkbox where the node is here in this place; a disabled one says why it can't be picked. A node a picked
-  // ancestor brings along is shown ticked and disabled: it goes along, and is left out by changing that ancestor's
-  // choice. A placeholder for a node that isn't here (or lives elsewhere here) gets an empty slot, so names stay in line.
+  // A checkbox where the node is on the source in this place (here, or on the remote when copying from it); a disabled
+  // one says why it can't be picked. A node a picked ancestor brings along is shown ticked and disabled: it goes along,
+  // and is left out by changing that ancestor's choice. A placeholder for a node that isn't on that side (or lives
+  // elsewhere there) gets an empty slot, so names stay in line.
   #renderPick(
     row: TreeRowResponseModel,
     kind: SideKind,
@@ -731,7 +779,7 @@ export class TransfrContentCompareElement extends UmbLitElement {
       return html`<span class="pick"></span>`;
     }
 
-    const why = whyNotSelectable(row, block, this._separateInstall.length > 0);
+    const why = whyNotSelectable(row, block, this._separateInstall.length > 0, this._direction);
     const along =
       why === undefined && coveredBy !== undefined ? `Comes along with everything below ${coveredBy}` : undefined;
     const title = why ?? along ?? `Select ${name} for a copy`;
