@@ -12,7 +12,7 @@
     <PackageId>Neirijnck.Transfr</PackageId>
     <Product>Transfr</Product>
     <Title>Transfr</Title>
-    <Description>Compare Umbraco content and media trees between environments side by side and copy nodes and media key-preserving, with a mandatory dry run.</Description>
+    <Description>Compare Umbraco content and media trees between environments side by side and copy nodes and media either way, key-preserving, with a mandatory dry run.</Description>
     <VersionPrefix>17.2.0</VersionPrefix>
     <Authors>Preben Neirijnck</Authors>
     <Copyright>Preben Neirijnck</Copyright>

@@ -4,6 +4,16 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 ## [Unreleased]
 
+### Added
+
+- Copying from a remote to this environment. A To/From switch above the trees in the Content and Media views picks the way; tick nodes and media items in the remote's tree, and the dry run and the transfer work as they do the other way. The copy writes here as you, through Umbraco's own editing services, and needs your user's permissions on every node and media item it writes. Media files are downloaded from the remote's public media path. It is allowed in the Development and Local environments, elsewhere only when `Transfr:AllowPull` is true. Fields can still only be copied to the remote.
+- The History view lists transfers both ways, and the dry run says which way an item was last copied.
+
+### Changed
+
+- A conflict now means that the side being written to changed since the last copy in either direction: after a copy to the remote and a later change there, copying it back here is an update as long as nothing changed here, and the other way round. The copy history keeps both sides' update times for this (a column is added to `transfrCopyHistory` on upgrade); copies recorded before count only for the direction they went.
+- A remote installed separately is also recognised from its own side (a document type there whose alias is here under another key), so copying from it is refused as a whole too.
+
 ## [17.2.0] - 2026-10-21
 
 ### Added

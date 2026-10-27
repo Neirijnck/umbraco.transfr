@@ -1,7 +1,7 @@
 {
   "$schema": "https://marketplace.umbraco.com/umbraco-marketplace-schema.json",
   "Title": "Transfr",
-  "Description": "Compare content and media trees between environments side by side, diff per property (blocks included), and copy nodes and media key-preserving with a mandatory dry run. Additive only: never deletes, unpublishes or moves.",
+  "Description": "Compare content and media trees between environments side by side, diff per property (blocks included), and copy nodes and media either way, key-preserving, with a mandatory dry run. Additive only: never deletes, unpublishes or moves.",
   "Category": "Developer Tools",
   "AuthorDetails": {
     "Name": "Preben Neirijnck",
