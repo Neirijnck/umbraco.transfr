@@ -8,9 +8,11 @@ namespace Neirijnck.Transfr.Core.Planning;
 /// </summary>
 /// <param name="Kind">Document, or media planned along.</param>
 /// <param name="Key">Its key, the same on the target after the copy.</param>
-/// <param name="ParentKey">Its parent here (null = root).</param>
-/// <param name="Name">Its name here.</param>
-/// <param name="DocumentTypeKey">For a document: its document type here; for a media item: its media type.</param>
+/// <param name="ParentKey">Its parent on the source (null = root).</param>
+/// <param name="Name">Its name on the source.</param>
+/// <param name="DocumentTypeKey">
+/// For a document: its document type on the source; for a media item: its media type.
+/// </param>
 /// <param name="Outcome">What the copy would do.</param>
 /// <param name="Notes">Why, and what to know, in the order they were found.</param>
 /// <param name="PublishCultures">

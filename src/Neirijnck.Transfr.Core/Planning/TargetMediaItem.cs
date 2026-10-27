@@ -1,7 +1,7 @@
 ﻿namespace Neirijnck.Transfr.Core.Planning;
 
 /// <summary>
-/// The target's copy of a media item or folder here.
+/// The target's copy of a media item or folder on the source.
 /// </summary>
 /// <param name="ParentKey">Its parent folder on the target (null = root; meaningless when trashed).</param>
 /// <param name="IsTrashed">Whether it is in the target's recycle bin.</param>

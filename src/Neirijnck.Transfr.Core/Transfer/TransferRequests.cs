@@ -32,8 +32,8 @@ public static class TransferRequests
 
         var source = DocumentJson.Parse(sourceJson, nameof(sourceJson));
 
-        // A culture not created here isn't created there either, nor are its values sent. Invariant values (culture
-        // null) always go, also in culture-variant content.
+        // A culture not created on the source isn't created on the target either, nor are its values sent. Invariant
+        // values (culture null) always go, also in culture-variant content.
         var variants = DocumentJson.Entries(source["variants"], withAlias: false)
             .Select(variant => variant.Entry)
             .Where(variant => DocumentJson.StringOf(variant["state"]) != "NotCreated")
@@ -84,9 +84,9 @@ public static class TransferRequests
 
     /// <summary>
     /// The write for a field-level copy. <c>PUT document/{id}</c> replaces every value (measured), so the body is the
-    /// target's document with only the chosen fields taken from here: a chosen value this side lacks is cleared there,
-    /// and the template and every other field stay the target's. A chosen field in a culture the target hasn't created
-    /// creates that culture, with its name here.
+    /// target's document with only the chosen fields taken from the source: a chosen value the source lacks is cleared
+    /// there, and the template and every other field stay the target's. A chosen field in a culture the target hasn't created
+    /// creates that culture, with its name on the source.
     /// </summary>
     /// <exception cref="ArgumentException">The row is not a field-level update of a document.</exception>
     public static DocumentWrite ForFields(PlanRow row, string sourceJson, string targetJson)

@@ -1,7 +1,7 @@
 ﻿namespace Neirijnck.Transfr.Core.Planning;
 
 /// <summary>
-/// A selected document here.
+/// A selected document on the source (the side copied from).
 /// </summary>
 /// <param name="Key">Its key.</param>
 /// <param name="ParentKey">Its parent (null = root).</param>

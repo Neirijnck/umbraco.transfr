@@ -38,10 +38,12 @@ public enum PlanNoteKind
     /// <summary>Conflict: the target changed after our last copy.</summary>
     ChangedSinceLastCopy,
 
-    /// <summary>The culture has unpublished changes here: its draft is copied without publishing.</summary>
+    /// <summary>The culture has unpublished changes on the source: its draft is copied without publishing.</summary>
     DraftOnly,
 
-    /// <summary>The culture is published on the target but not here: a copy never unpublishes, so this stays.</summary>
+    /// <summary>
+    /// The culture is published on the target but not on the source: a copy never unpublishes, so this stays.
+    /// </summary>
     PublishStateNotApplied,
 
     /// <summary>
@@ -54,12 +56,12 @@ public enum PlanNoteKind
     UnderAnotherParentOnTarget,
 
     /// <summary>
-    /// The node takes another place among its siblings on the target, the one it has here: right after the node in Key
-    /// (null = first).
+    /// The node takes another place among its siblings on the target, the one it has on the source: right after the node
+    /// in Key (null = first).
     /// </summary>
     PlacedAfter,
 
-    /// <summary>A referenced media item doesn't exist here either: the reference is copied as it is.</summary>
+    /// <summary>A referenced media item doesn't exist on the source either: the reference is copied as it is.</summary>
     MediaMissingHere,
 
     /// <summary>Blocks: a field-level copy only updates a node, and the target doesn't have this one.</summary>

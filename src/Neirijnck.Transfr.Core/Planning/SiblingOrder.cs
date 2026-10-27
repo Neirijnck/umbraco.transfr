@@ -2,15 +2,15 @@
 
 /// <summary>
 /// Where copied nodes go among their siblings on the target. A new node goes right after its nearest preceding sibling
-/// here that is on the target, or first when it has none. A node that is already there moves the same way, but only
-/// when it is out of order: outside the longest run of siblings that are in the same order on both sides (as the tree's
-/// "Order differs"). Nodes that weren't copied never move, so the run is chosen to keep as many of them as it can, then
+/// on the source that is on the target, or first when it has none. A node that is already there moves the same way, but
+/// only when it is out of order: outside the longest run of siblings that are in the same order on both sides (as the
+/// tree's "Order differs"). Nodes that weren't copied never move, so the run is chosen to keep as many of them as it can, then
 /// as many copied ones; nodes in order stay put around a node that wasn't copied.
 /// </summary>
 public static class SiblingOrder
 {
     /// <param name="targetOrder">The parent's children on the target, in order (without the nodes still to create).</param>
-    /// <param name="localOrder">The same parent's children here, in order.</param>
+    /// <param name="localOrder">The same parent's children on the source, in order.</param>
     /// <param name="copied">The copied nodes under that parent, new ones included.</param>
     /// <returns>The children on the target in their new order, the new nodes included.</returns>
     public static IReadOnlyList<Guid> Place(IReadOnlyList<Guid> targetOrder, IReadOnlyList<Guid> localOrder, IReadOnlySet<Guid> copied)
@@ -25,11 +25,12 @@ public static class SiblingOrder
             .Select(index => shared[index])
             .ToHashSet();
 
-        // A copied node that isn't a child here (it shouldn't be) stays where it is, or isn't added when it's new.
+        // A copied node that isn't a child on the source (it shouldn't be) stays where it is, or isn't added when it's
+        // new.
         var placeable = localOrder.Where(key => copied.Contains(key) && !inOrder.Contains(key)).ToHashSet();
         var result = targetOrder.Where(key => !placeable.Contains(key)).ToList();
 
-        // In local order, so a run of copied nodes follows one another.
+        // In source order, so a run of copied nodes follows one another.
         for (var index = 0; index < localOrder.Count; index++)
         {
             var key = localOrder[index];
@@ -61,7 +62,7 @@ public static class SiblingOrder
     /// behind nodes that exist only there it would otherwise count as in order and stay last.
     /// </summary>
     /// <param name="targetOrderNow">The parent's children on the target now, the created nodes included.</param>
-    /// <param name="localOrder">The same parent's children here, in order.</param>
+    /// <param name="localOrder">The same parent's children on the source, in order.</param>
     /// <param name="copied">The copied nodes under that parent, the created ones included.</param>
     /// <param name="created">The nodes the transfer created under that parent.</param>
     public static IReadOnlyList<Guid> PlaceAfterWrite(
