@@ -4,6 +4,7 @@ import type {
   PlanRowResponseModel,
   TransferResponseModel,
 } from '../api/index.js';
+import { sidesOf, type Direction } from './direction.js';
 import { countByKind, describeItems } from './item-count.js';
 import type { OutcomeLook } from './plan-view.js';
 
@@ -72,7 +73,11 @@ export function describeDrift(drift: PlanDriftResponseModel, remoteName: string)
 }
 
 /** The headline of a transfer report. */
-export function describeTransfer(response: TransferResponseModel, remoteName: string): string {
+export function describeTransfer(
+  response: TransferResponseModel,
+  remoteName: string,
+  direction: Direction = 'ToRemote',
+): string {
   const writtenRows = response.rows.filter((row) => row.result === 'Written');
   const written = writtenRows.length;
   const { nodes: writtenNodes, media: writtenMedia } = countByKind(writtenRows);
@@ -83,7 +88,7 @@ export function describeTransfer(response: TransferResponseModel, remoteName: st
       : '';
   switch (response.status) {
     case 'Completed':
-      return `Copied ${nodes} to ${remoteName}${sorted}.`;
+      return `Copied ${nodes} ${sidesOf(direction, remoteName).way}${sorted}.`;
     case 'Failed':
       return `Stopped at a failure. ${
         written === 0
@@ -93,7 +98,7 @@ export function describeTransfer(response: TransferResponseModel, remoteName: st
     case 'Refused':
       return `Nothing was copied: something changed since the dry run. Run the dry run again and check it.`;
     case 'Busy':
-      return `Nothing was copied: ${response.error ?? 'another transfer to this remote is running.'}`;
+      return `Nothing was copied: ${response.error ?? 'another transfer with this remote is running.'}`;
     default:
       return `The transfer ended with "${response.status}".`;
   }

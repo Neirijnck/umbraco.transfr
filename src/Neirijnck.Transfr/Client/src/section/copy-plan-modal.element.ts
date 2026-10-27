@@ -12,6 +12,7 @@ import type {
 import { brandStyles } from './brand.js';
 import { summarizeDifferences } from './content-summary.js';
 import type { TransfrCopyPlanModalData, TransfrCopyPlanModalValue } from './copy-plan-modal.token.js';
+import { sidesOf, type Direction } from './direction.js';
 import { describeFields } from './field-picks.js';
 import {
   OUTCOMES,
@@ -75,6 +76,10 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
     void this.#load();
   }
 
+  get #direction(): Direction {
+    return this.data?.direction ?? 'ToRemote';
+  }
+
   async #load() {
     const alias = this.data?.alias;
     if (!alias) {
@@ -88,7 +93,10 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
     const started = performance.now();
     const { data, error } = await tryExecute(
       this,
-      TransfrService.planCopy({ path: { alias }, body: { selection: batchToRequest(this._batch) } }),
+      TransfrService.planCopy({
+        path: { alias },
+        body: { selection: batchToRequest(this._batch), direction: this.#direction },
+      }),
       { disableNotifications: true },
     );
     this._loading = false;
@@ -131,7 +139,12 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
       this,
       TransfrService.transfer({
         path: { alias },
-        body: { selection: batchToRequest(this._batch), dryRun: toDryRun(plan.rows), overwrite: [...this._overwrite] },
+        body: {
+          selection: batchToRequest(this._batch),
+          dryRun: toDryRun(plan.rows),
+          overwrite: [...this._overwrite],
+          direction: this.#direction,
+        },
       }),
       { disableNotifications: true },
     );
@@ -155,8 +168,9 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
     const plan = this._plan;
     const writes = plan ? countWrites(plan.rows, this._overwrite) : 0;
     const refused = (plan?.separateInstall.length ?? 0) > 0;
+    const { way } = sidesOf(this.#direction, remote);
     return html`
-      <umb-body-layout headline=${this._transfer ? `Transfer to ${remote}` : `Dry run: copy to ${remote}`}>
+      <umb-body-layout headline=${this._transfer ? `Transfer ${way}` : `Dry run: copy ${way}`}>
         ${
           this._transfer
             ? this.#renderReport(this._transfer, remote)
@@ -175,7 +189,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
               : html`<uui-button
                   look="primary"
                   color="positive"
-                  label=${`Transfer ${plan ? describeWrites(plan.rows, this._overwrite) : '0 nodes'} to ${remote}`}
+                  label=${`Transfer ${plan ? describeWrites(plan.rows, this._overwrite) : '0 nodes'} ${way}`}
                   .state=${this._transferring ? 'waiting' : undefined}
                   ?disabled=${writes === 0 || refused || this._loading || this._transferring || !plan}
                   @click=${() => this.#transfer()}
@@ -198,7 +212,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
     return html`
       <div class="notice ${failed ? 'error' : 'done'}" role=${failed ? 'alert' : 'status'}>
         <umb-icon name=${failed ? 'icon-alert' : 'icon-check'}></umb-icon>
-        <span>${describeTransfer(transfer, remote)}</span>
+        <span>${describeTransfer(transfer, remote, this.#direction)}</span>
       </div>
       ${transfer.error && transfer.status !== 'Busy' ? html`<p class="error-text">${transfer.error}</p>` : nothing}
       ${
@@ -247,7 +261,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
             ><span class="chip"><umb-icon name=${look.icon}></umb-icon>${look.label}</span></uui-tag
           >
         </div>
-        ${row.targetState ? html`<div class="line">On ${remote} now: ${row.targetState}</div>` : nothing}
+        ${row.targetState ? html`<div class="line">${sidesOf(this.#direction, remote).targetNow}: ${row.targetState}</div>` : nothing}
         ${row.error ? html`<div class="line error-text">${row.error}</div>` : nothing}
       </li>
     `;
@@ -303,7 +317,9 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
       </div>
       ${
         rows.length === 0
-          ? html`<p class="empty">Everything selected is the same on ${remote}: nothing to copy.</p>`
+          ? html`<p class="empty">
+              Everything selected is the same ${sidesOf(this.#direction, remote).onTarget}: nothing to copy.
+            </p>`
           : html`<ol class="rows">
               ${repeat(
                 rows,
@@ -330,8 +346,14 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
           >
         </div>
         ${row.fields?.length ? html`<div class="line">Only these fields: ${describeFields(row.fields)}</div>` : nothing}
-        ${differs ? html`<div class="line">Differs on ${remote}: ${differs}</div>` : nothing}
-        ${row.changedOnRemote ? html`<div class="line">${describeRemoteChange(row.changedOnRemote, remote)}</div>` : nothing}
+        ${differs ? html`<div class="line">Differs ${sidesOf(this.#direction, remote).onTarget}: ${differs}</div>` : nothing}
+        ${
+          row.changedOnRemote
+            ? html`<div class="line">
+                ${describeRemoteChange(row.changedOnRemote, remote, undefined, this.#direction)}
+              </div>`
+            : nothing
+        }
         ${row.lastCopied ? html`<div class="line">${describeLastCopy(row.lastCopied, remote)}</div>` : nothing}
         ${publish ? html`<div class="line">${publish}</div>` : nothing}
         ${
@@ -343,7 +365,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
                   ?disabled=${this._transferring}
                   @change=${(event: Event) => this.#toggleOverwrite(row.key, (event.target as HTMLInputElement).checked)}
                 />
-                Overwrite on ${remote}: replace its version there with this one
+                ${sidesOf(this.#direction, remote).overwrite}
               </label>`
             : nothing
         }
@@ -364,7 +386,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
       <li class=${note.blocks ? 'blocks' : ''}>
         <umb-icon name=${note.blocks ? 'icon-block' : 'icon-info'}></umb-icon>
         <span>
-          ${describeNote(note, remote, row.kind)}
+          ${describeNote(note, remote, row.kind, this.#direction)}
           ${
             note.kind === 'SchemaMismatch'
               ? html`<ul class="details">

@@ -13,14 +13,30 @@ describe('describeTransferHeadline', () => {
   // As the history answers it (measured on test site A): UTC, Brussels was UTC+2 then.
   const at = '2026-10-15T10:25:28.2757756+00:00';
 
-  it('names the moment in the given zone and the user', () => {
-    expect(describeTransferHeadline({ at, by: 'Transfr Admin', documents: [] }, 'Europe/Brussels')).toBe(
-      '15 Oct 2026, 12:25 by Transfr Admin',
-    );
+  it('names the way, the remote, the moment in the given zone and the user', () => {
+    expect(
+      describeTransferHeadline(
+        { at, by: 'Transfr Admin', documents: [], direction: 'ToRemote' },
+        'Test site B',
+        'Europe/Brussels',
+      ),
+    ).toBe('To Test site B, 15 Oct 2026, 12:25 by Transfr Admin');
+  });
+
+  it('says from for a copy from the remote', () => {
+    expect(
+      describeTransferHeadline(
+        { at, by: 'Transfr Admin', documents: [], direction: 'FromRemote' },
+        'Test site B',
+        'UTC',
+      ),
+    ).toBe('From Test site B, 15 Oct 2026, 10:25 by Transfr Admin');
   });
 
   it('leaves out a user that no longer exists', () => {
-    expect(describeTransferHeadline({ at, by: null, documents: [] }, 'UTC')).toBe('15 Oct 2026, 10:25');
+    expect(describeTransferHeadline({ at, by: null, documents: [], direction: 'ToRemote' }, 'Test site B', 'UTC')).toBe(
+      'To Test site B, 15 Oct 2026, 10:25',
+    );
   });
 });
 

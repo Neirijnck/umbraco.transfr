@@ -1,4 +1,5 @@
 import type { FieldChoiceRequestModel, PlanSelectionRequestModel, TreeRowResponseModel } from '../api/index.js';
+import type { Direction } from './direction.js';
 import { describeItems } from './item-count.js';
 import type { RowBlock } from './schema-view.js';
 
@@ -112,16 +113,18 @@ export function batchFromRequest(selection: ReadonlyArray<PlanSelectionRequestMo
 /** The part of the Web Storage API the batch needs (sessionStorage in the browser, a fake in tests). */
 export type BatchStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
-const batchKey = (alias: string) => `transfr.batch.${alias}`;
+// A copy to the remote keeps the key it had before copies could go the other way, so a batch picked then is kept.
+const batchKey = (alias: string, direction: Direction) =>
+  direction === 'FromRemote' ? `transfr.batch.${alias}.from` : `transfr.batch.${alias}`;
 
 /**
- * The batch picked for a remote in this browser tab: one per tab and per remote, nodes and media together. Storage
- * that is missing, full or blocked, or holds something else, gives an empty batch: a lost batch is picked again, never
- * a crash. An entry it can't read (another kind, unreadable fields) is left out.
+ * The batch picked for a remote in this browser tab: one per tab, per remote and per direction, nodes and media
+ * together. Storage that is missing, full or blocked, or holds something else, gives an empty batch: a lost batch is
+ * picked again, never a crash. An entry it can't read (another kind, unreadable fields) is left out.
  */
-export function loadBatch(storage: BatchStorage | undefined, alias: string): Batch {
+export function loadBatch(storage: BatchStorage | undefined, alias: string, direction: Direction = 'ToRemote'): Batch {
   try {
-    const parsed: unknown = JSON.parse(storage?.getItem(batchKey(alias)) ?? '[]');
+    const parsed: unknown = JSON.parse(storage?.getItem(batchKey(alias, direction)) ?? '[]');
     if (!Array.isArray(parsed)) {
       return EMPTY_BATCH;
     }
@@ -147,13 +150,18 @@ export function loadBatch(storage: BatchStorage | undefined, alias: string): Bat
   }
 }
 
-/** Keeps the batch for a remote in this browser tab; an empty batch is removed. */
-export function saveBatch(storage: BatchStorage | undefined, alias: string, batch: Batch): void {
+/** Keeps the batch for a remote and direction in this browser tab; an empty batch is removed. */
+export function saveBatch(
+  storage: BatchStorage | undefined,
+  alias: string,
+  batch: Batch,
+  direction: Direction = 'ToRemote',
+): void {
   try {
     if (isEmptyBatch(batch)) {
-      storage?.removeItem(batchKey(alias));
+      storage?.removeItem(batchKey(alias, direction));
     } else {
-      storage?.setItem(batchKey(alias), JSON.stringify(batchToRequest(batch)));
+      storage?.setItem(batchKey(alias, direction), JSON.stringify(batchToRequest(batch)));
     }
   } catch (error) {
     console.warn('[Transfr] The batch could not be kept in session storage', error);
@@ -189,22 +197,27 @@ export function describeBatch(batch: Batch): string {
 }
 
 /**
- * Why a row's node can't be picked for a copy from here, or undefined when it can: it must be here in this place (not
- * only on the remote, not a placeholder for its place elsewhere), and not blocked by the schema or a blocked parent.
+ * Why a row's node can't be picked for a copy, or undefined when it can: it must be on the source in this place (here
+ * when copying to the remote, on the remote when copying from it; not only on the other side, not a placeholder for its
+ * place elsewhere), and not blocked by the schema or a blocked parent.
  */
 export function whyNotSelectable(
   row: TreeRowResponseModel,
   block: RowBlock | undefined,
   refused: boolean,
+  direction: Direction = 'ToRemote',
 ): string | undefined {
+  const fromRemote = direction === 'FromRemote';
   if (refused) {
-    return 'The remote was installed separately: nothing can be copied to it.';
+    return `The remote was installed separately: nothing can be copied ${fromRemote ? 'from' : 'to'} it.`;
   }
-  if (row.status === 'OnlyRemote') {
-    return 'It is not here.';
+  if (row.status === (fromRemote ? 'OnlyLocal' : 'OnlyRemote')) {
+    return fromRemote ? 'It is not on the remote.' : 'It is not here.';
   }
-  if (row.status === 'ElsewhereLocally') {
-    return 'Here it lives under another parent: select it there.';
+  if (row.status === (fromRemote ? 'ElsewhereOnRemote' : 'ElsewhereLocally')) {
+    return fromRemote
+      ? 'On the remote it lives under another parent: select it there.'
+      : 'Here it lives under another parent: select it there.';
   }
   if (block) {
     return block.reason;

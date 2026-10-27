@@ -190,6 +190,19 @@ describe('batch storage', () => {
     };
   };
 
+  it('keeps a batch per direction, the copy to the remote under the key it always had', () => {
+    const storage = memory();
+    saveBatch(storage, 'b', batch([['to', false]]));
+    saveBatch(storage, 'b', batch([['from', true]]), 'FromRemote');
+
+    expect([...storage.items.keys()].sort()).toEqual(['transfr.batch.b', 'transfr.batch.b.from']);
+    expect([...loadBatch(storage, 'b').documents.keys()]).toEqual(['to']);
+    expect([...loadBatch(storage, 'b', 'FromRemote').documents.keys()]).toEqual(['from']);
+
+    saveBatch(storage, 'b', EMPTY_BATCH, 'FromRemote');
+    expect([...storage.items.keys()]).toEqual(['transfr.batch.b']);
+  });
+
   it('keeps the batch per remote, nodes and media, and gives it back in the order picked', () => {
     const storage = memory();
     saveBatch(
@@ -271,6 +284,19 @@ describe('whyNotSelectable', () => {
   it('refuses a node that is only on the remote or lives elsewhere here', () => {
     expect(whyNotSelectable(row('OnlyRemote'), undefined, false)).toBe('It is not here.');
     expect(whyNotSelectable(row('ElsewhereLocally'), undefined, false)).toMatch(/select it there/);
+  });
+
+  it.each(['InBoth', 'OnlyRemote', 'ElsewhereLocally'])(
+    'lets a node on the remote in this place be picked when copying from it (%s)',
+    (status) => {
+      expect(whyNotSelectable(row(status), undefined, false, 'FromRemote')).toBeUndefined();
+    },
+  );
+
+  it('refuses, when copying from the remote, a node only here or living elsewhere there', () => {
+    expect(whyNotSelectable(row('OnlyLocal'), undefined, false, 'FromRemote')).toBe('It is not on the remote.');
+    expect(whyNotSelectable(row('ElsewhereOnRemote'), undefined, false, 'FromRemote')).toMatch(/select it there/);
+    expect(whyNotSelectable(row('InBoth'), undefined, true, 'FromRemote')).toMatch(/copied from it/);
   });
 
   it('refuses a blocked node with the block reason, and everything on a refused remote', () => {

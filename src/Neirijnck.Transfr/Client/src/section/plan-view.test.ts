@@ -54,6 +54,12 @@ describe('describeRemoteChange', () => {
     );
   });
 
+  it('says here when copying from the remote, where this environment is the target', () => {
+    expect(describeRemoteChange({ by: 'Transfr Admin', at, what: 'Save' }, 'Test site B', 'UTC', 'FromRemote')).toBe(
+      'Last saved here by Transfr Admin, 15 Oct 2026, 10:25',
+    );
+  });
+
   it('leaves out a user it has no name for, and shows an unknown change as named', () => {
     expect(describeRemoteChange({ at, what: 'Copy' }, 'Test site B', 'UTC')).toBe(
       'Last Copy on Test site B, 15 Oct 2026, 10:25',
@@ -65,13 +71,19 @@ describe('describeLastCopy', () => {
   const at = '2026-10-15T10:52:47.6602278+00:00';
 
   it('names the remote, the user here and the time in the given zone', () => {
-    expect(describeLastCopy({ by: 'Transfr Admin', at }, 'Test site B', 'Europe/Brussels')).toBe(
+    expect(describeLastCopy({ by: 'Transfr Admin', at, direction: 'ToRemote' }, 'Test site B', 'Europe/Brussels')).toBe(
       'Last copied to Test site B by Transfr Admin, 15 Oct 2026, 12:52',
     );
   });
 
+  it('says from for a copy from the remote', () => {
+    expect(describeLastCopy({ by: 'Transfr Admin', at, direction: 'FromRemote' }, 'Test site B', 'UTC')).toBe(
+      'Last copied from Test site B by Transfr Admin, 15 Oct 2026, 10:52',
+    );
+  });
+
   it('leaves out a user that no longer exists', () => {
-    expect(describeLastCopy({ by: null, at }, 'Test site B', 'UTC')).toBe(
+    expect(describeLastCopy({ by: null, at, direction: 'ToRemote' }, 'Test site B', 'UTC')).toBe(
       'Last copied to Test site B, 15 Oct 2026, 10:52',
     );
   });
@@ -140,9 +152,41 @@ describe('describeNote', () => {
       note('ParentNotPublished', { name: 'News' }),
       'Its parent "News" isn\'t published on B: it is saved as a draft, not published.',
     ],
+    [note('NoBaseline'), 'It differs on B, and there is no earlier copy from here to tell who changed it.'],
+    [note('ChangedSinceLastCopy'), 'It changed on B since the last copy.'],
     [note('SomethingNew'), 'SomethingNew'],
   ])('describes %o', (input, expected) => {
     expect(describeNote(input, 'B')).toBe(expected);
+  });
+
+  // Copying from the remote: this environment is the target, the remote the source.
+  it.each([
+    [note('ParentMissingOnTarget', { name: 'News' }), 'Its parent "News" isn\'t here.'],
+    [
+      note('SameNameOtherKey', { name: 'Contact' }),
+      'This environment has another node called "Contact" under the same parent.',
+    ],
+    [note('TrashedOnTarget'), 'It is in the recycle bin here.'],
+    [note('NoBaseline'), 'It differs here, and there is no earlier copy from B to tell who changed it.'],
+    [note('ChangedSinceLastCopy'), 'It changed here since the last copy.'],
+    [
+      note('DraftOnly', { culture: 'nl-BE' }),
+      'nl-BE has unpublished changes on B: the draft is copied, not published.',
+    ],
+    [
+      note('PublishStateNotApplied', { culture: 'nl-BE' }),
+      'nl-BE is published here but not on B: it stays published, a copy never unpublishes.',
+    ],
+    [
+      note('PlacedAfter', { key: 'k', name: 'News' }),
+      'It takes its place on B among its siblings here: right after "News".',
+    ],
+    [
+      note('MediaMissingHere', { propertyAlias: 'image' }),
+      '"image" uses a media item that doesn\'t exist on B either: the reference is copied as it is.',
+    ],
+  ])('describes %o when copying from the remote', (input, expected) => {
+    expect(describeNote(input, 'B', 'Document', 'FromRemote')).toBe(expected);
   });
 
   it.each([
