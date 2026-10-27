@@ -41,6 +41,7 @@ public class TransfrRemoteComposer : IComposer
         builder.Services.AddSingleton<DocumentDiffService>();
         builder.Services.AddSingleton<CopyHistoryStore>();
         builder.Services.AddSingleton<CopyPlanService>();
+        builder.Services.AddSingleton<LocalTransferServices>();
         builder.Services.AddSingleton<TransferService>();
         builder.Services.AddSingleton<TransferHistoryService>();
     }

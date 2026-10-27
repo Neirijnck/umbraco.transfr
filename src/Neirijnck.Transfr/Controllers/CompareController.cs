@@ -184,8 +184,9 @@ public partial class CompareController : TransfrApiControllerBase
     }
 
     /// <summary>
-    /// Carries out a dry run on the remote: plans again and writes only when every document row is as DryRun shows it
-    /// (status Refused with the differences otherwise, Busy when another transfer to the remote is running). The report
+    /// Carries out a dry run, on the remote or (Direction FromRemote) here: plans again and writes only when every row is
+    /// as DryRun shows it (status Refused with the differences otherwise, Busy when another transfer with the remote is
+    /// running). A copy to here writes as the signed-in user, with that user's permissions. The report
     /// says per row what happened; a failed row stops the rest, and what was written stays written. Always 200 with the
     /// report: the backoffice HTTP client replaces the body of a 409 with a generic error (measured), so the reasons
     /// would never reach the view.
@@ -219,13 +220,19 @@ public partial class CompareController : TransfrApiControllerBase
             return this.Problem(title: "The selection can't be read", detail: invalid, statusCode: StatusCodes.Status400BadRequest);
         }
 
+        var (direction, refused) = this.ReadDirection(request.Direction);
+        if (refused is not null)
+        {
+            return refused;
+        }
+
         var overwrite = (request.Overwrite ?? []).ToHashSet();
         var userKey = CurrentUserKey(this.backOfficeSecurityAccessor);
         return await this.CompareWithAsync(alias, null, async remote =>
         {
             try
             {
-                var result = await this.transfer.TransferAsync(remote, userKey, selection, dryRun, overwrite, cancellationToken);
+                var result = await this.transfer.TransferAsync(remote, direction, this.User, userKey, selection, dryRun, overwrite, cancellationToken);
                 return this.Ok(TransferResponses.From(result));
             }
             catch (PlanSelectionException exception)
