@@ -372,7 +372,7 @@ public sealed partial class CopyPlanService
 
         var users = await this.userService.GetAsync(lastCopies.Values.Select(copy => copy.UserKey).Distinct());
         var names = users.ToDictionary(user => user.Key, user => user.Name);
-        return lastCopies.ToDictionary(pair => pair.Key, pair => new LastCopyInfo(names.GetValueOrDefault(pair.Value.UserKey), pair.Value.CopiedAt));
+        return lastCopies.ToDictionary(pair => pair.Key, pair => new LastCopyInfo(names.GetValueOrDefault(pair.Value.UserKey), pair.Value.CopiedAt, pair.Value.Direction));
     }
 
     private async Task<CopyPlanResult> Describe(

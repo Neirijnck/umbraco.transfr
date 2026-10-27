@@ -27,7 +27,7 @@ public class HistoryController : TransfrApiControllerBase
     }
 
     /// <summary>
-    /// The transfers from here to the remote, newest first, as the copy history recorded them (the documents each one
+    /// The transfers between here and the remote, either way, newest first, as the copy history recorded them (the documents each one
     /// wrote). Only reads here: the remote isn't contacted. 400 when take or before is out of range.
     /// </summary>
     [HttpGet("remotes/{alias}/history")]
@@ -62,7 +62,8 @@ public class HistoryController : TransfrApiControllerBase
                             page.DocumentNames.GetValueOrDefault(document.DocumentKey),
                             document.Outcome,
                             document.Kind.ToString()))
-                        .ToList()))
+                        .ToList(),
+                    transfer.Direction.ToString()))
                 .ToList(),
             page.NextBefore));
     }

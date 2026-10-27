@@ -53,6 +53,16 @@ public sealed class TransferHistoryTests
     }
 
     [Fact]
+    public void Group_SplitsTheSameMomentByDirection()
+    {
+        CopyHistoryEntry[] rows = [Row(3, About, "Update", Admin, "10:00:00", CopyDirection.FromRemote), Row(2, Features, "Update", Admin, "10:00:00")];
+
+        var transfers = TransferHistory.Group(rows);
+
+        Assert.Equal([CopyDirection.FromRemote, CopyDirection.ToRemote], transfers.Select(transfer => transfer.Direction));
+    }
+
+    [Fact]
     public void Group_OfNoRowsIsEmpty()
     {
         Assert.Empty(TransferHistory.Group([]));
@@ -100,8 +110,8 @@ public sealed class TransferHistoryTests
         Assert.Throws<ArgumentOutOfRangeException>(() => TransferHistory.Cut(TransferHistory.Group(Rows), 0));
     }
 
-    private static CopyHistoryEntry Row(int id, Guid document, string outcome, Guid user, string time)
-        => new(id, document, outcome, user, At(time), PlanItemKind.Document);
+    private static CopyHistoryEntry Row(int id, Guid document, string outcome, Guid user, string time, CopyDirection direction = CopyDirection.ToRemote)
+        => new(id, document, outcome, user, At(time), PlanItemKind.Document, direction);
 
     private static DateTimeOffset At(string time)
         => DateTimeOffset.Parse($"2026-10-15T{time}+00:00", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);

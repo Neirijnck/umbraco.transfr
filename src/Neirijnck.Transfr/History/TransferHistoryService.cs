@@ -7,7 +7,7 @@ using Umbraco.Cms.Core.Services;
 namespace Neirijnck.Transfr.History;
 
 /// <summary>
-/// Reads the transfers from here to a remote a page at a time, with the names of the users, documents and media here.
+/// Reads the transfers between here and a remote, either way, a page at a time, with the names of the users, documents and media here.
 /// </summary>
 public sealed class TransferHistoryService
 {

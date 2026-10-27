@@ -31,7 +31,7 @@ internal static class PlanResponses
             row.SchemaProblems.Select(ResponseMapping.From).ToList(),
             row.Fingerprint,
             result.RemoteChanges.GetValueOrDefault(row.Key) is { } change ? new RemoteChangeResponseModel(change.By, change.At, change.What) : null,
-            result.LastCopies.GetValueOrDefault(row.Key) is { } copy ? new LastCopyResponseModel(copy.By, copy.At) : null,
+            result.LastCopies.GetValueOrDefault(row.Key) is { } copy ? new LastCopyResponseModel(copy.By, copy.At, copy.Direction.ToString()) : null,
             row.Fields?.Select(field => new FieldChoiceResponseModel(
                 field.Kind.ToString(),
                 field.Alias,

@@ -17,8 +17,6 @@ public sealed class CopyHistoryStore
     // Rows per read while paging transfers: a page usually needs one read.
     private const int RowsPerRead = 500;
 
-    private const string ToRemote = nameof(CopyDirection.ToRemote);
-
     private readonly IScopeProvider scopeProvider;
     private readonly TimeProvider timeProvider;
 
@@ -53,7 +51,7 @@ public sealed class CopyHistoryStore
     }
 
     /// <summary>
-    /// A page of transfers from here to the remote, newest first: up to <paramref name="take"/> transfers recorded
+    /// A page of transfers between here and the remote, either way, newest first: up to <paramref name="take"/> transfers recorded
     /// before the row <paramref name="before"/> (null = the latest), and the id to pass for the next page (null when
     /// there is none).
     /// </summary>
@@ -72,11 +70,17 @@ public sealed class CopyHistoryStore
             var chunk = scope.Database.SkipTake<CopyHistoryDto>(
                 0,
                 RowsPerRead,
-                "WHERE remote = @0 AND direction = @1 AND id < @2 ORDER BY id DESC",
+                "WHERE remote = @0 AND id < @1 ORDER BY id DESC",
                 identity,
-                ToRemote,
                 cursor);
-            rows.AddRange(chunk.Select(row => new CopyHistoryEntry(row.Id, row.DocumentKey, row.Outcome, row.UserKey, Utc(row.CopiedAt), Enum.Parse<PlanItemKind>(row.Kind))));
+            rows.AddRange(chunk.Select(row => new CopyHistoryEntry(
+                row.Id,
+                row.DocumentKey,
+                row.Outcome,
+                row.UserKey,
+                Utc(row.CopiedAt),
+                Enum.Parse<PlanItemKind>(row.Kind),
+                Enum.Parse<CopyDirection>(row.Direction))));
 
             var transfers = TransferHistory.Group(rows);
             if (!TransferHistory.NeedsMoreRows(transfers, take, noMoreRows: chunk.Count < RowsPerRead))

@@ -2,8 +2,8 @@
 
 /// <summary>
 /// Turns the copy history of one remote into transfers, a page at a time. A transfer records all of its rows in one
-/// moment, and only one transfer runs per remote at a time, so among a remote's rows (newest first) a transfer is a run
-/// of rows with the same moment and user.
+/// moment, and only one transfer runs per remote at a time (either way), so among a remote's rows (newest first) a
+/// transfer is a run of rows with the same moment, user and direction.
 /// </summary>
 public static class TransferHistory
 {
@@ -16,7 +16,7 @@ public static class TransferHistory
         var run = new List<CopyHistoryEntry>();
         foreach (var row in rowsNewestFirst)
         {
-            if (run.Count > 0 && (row.CopiedAt != run[0].CopiedAt || row.UserKey != run[0].UserKey))
+            if (run.Count > 0 && (row.CopiedAt != run[0].CopiedAt || row.UserKey != run[0].UserKey || row.Direction != run[0].Direction))
             {
                 transfers.Add(ToTransfer(run));
                 run = [];
@@ -59,5 +59,5 @@ public static class TransferHistory
 
     // Rows were read newest first; a transfer lists its documents in the order it recorded them.
     private static TransferRecord ToTransfer(List<CopyHistoryEntry> run)
-        => new(run[0].CopiedAt, run[0].UserKey, run.OrderBy(row => row.Id).ToList());
+        => new(run[0].CopiedAt, run[0].UserKey, run.OrderBy(row => row.Id).ToList(), run[0].Direction);
 }
