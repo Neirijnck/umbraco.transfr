@@ -181,7 +181,7 @@ npm test
 npm run format:check
 ```
 
-`npm audit` reports advisories in `js-yaml` (through `@hey-api/openapi-ts`, the client generator) and `dompurify` (through `@umbraco-cms/backoffice`). Both are development dependencies: the generator never ships, and the backoffice package is external to the bundle (the CMS serves its own). The suggested fixes are major downgrades, so they are accepted.
+The client's `package.json` overrides two transitive versions so that `npm audit` stays clean: `js-yaml` (pinned to a vulnerable version by `@hey-api/openapi-ts`, the client generator) and the `dompurify` that `monaco-editor` pins (through `@umbraco-cms/backoffice`). Both are development dependencies and neither reaches the bundle: the generator never ships, and the backoffice package is external to the bundle (the CMS serves its own). `npm audit fix` can't lift exact pins without major downgrades, hence the overrides; drop each one once its parent no longer pins a vulnerable version.
 
 To build the NuGet package (Release, client included) into `artifacts/`, which is gitignored:
 
