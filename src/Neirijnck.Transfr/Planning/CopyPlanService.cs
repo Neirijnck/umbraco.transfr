@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Neirijnck.Transfr.Compare;
+using Neirijnck.Transfr.Core.History;
 using Neirijnck.Transfr.Core.Planning;
 using Neirijnck.Transfr.Core.References;
 using Neirijnck.Transfr.Core.Remote;
@@ -144,7 +145,7 @@ public sealed partial class CopyPlanService
         var (mediaSchema, mediaSchemaRequests) = await this.schemaChecks.CheckMediaTypesAsync(remote, mediaTypes, cancellationToken);
         requests += mediaSchemaRequests;
 
-        var lastCopies = this.history.LatestCopies(remote, sources.Select(source => source.Key).Concat(localMedia.Keys).ToList());
+        var lastCopies = this.history.LatestCopies(remote, sources.Select(source => source.Key).Concat(localMedia.Keys).ToList(), CopyDirection.ToRemote);
         var rows = CopyPlanner.Plan(new CopyPlanFacts
         {
             Sources = sources,
@@ -159,8 +160,11 @@ public sealed partial class CopyPlanService
             TargetMedia = targetMedia,
             MediaSchema = mediaSchema,
 
-            // A node or media item different on the target is an update only when the target is as our last copy left it.
-            Baseline = lastCopies.ToDictionary(pair => pair.Key, pair => pair.Value.TargetUpdate),
+            // A node or media item different on the target is an update only when the target is as our last copy, either
+            // way, left it; without that side recorded there is no baseline (a conflict).
+            Baseline = lastCopies
+                .Where(pair => pair.Value.TargetUpdate is not null)
+                .ToDictionary(pair => pair.Key, pair => pair.Value.TargetUpdate!.Value),
         });
 
         var conflicts = rows.Where(row => row.Outcome == PlanOutcome.Conflict).Select(row => (row.Kind, row.Key)).ToList();

@@ -9,4 +9,5 @@ namespace Neirijnck.Transfr.Persistence;
 /// <param name="Outcome">Create or Update.</param>
 /// <param name="TargetUpdateDate">The target's last save right after the copy.</param>
 /// <param name="Kind">A document or a media item.</param>
-public sealed record CopyRecord(Guid DocumentKey, string Outcome, DateTimeOffset TargetUpdateDate, PlanItemKind Kind);
+/// <param name="SourceUpdateDate">The source's last save when it was copied (null when it carried none).</param>
+public sealed record CopyRecord(Guid DocumentKey, string Outcome, DateTimeOffset TargetUpdateDate, PlanItemKind Kind, DateTimeOffset? SourceUpdateDate);

@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Neirijnck.Transfr.Core.History;
 using Neirijnck.Transfr.Core.Planning;
 using Neirijnck.Transfr.Core.Remote;
 using Neirijnck.Transfr.Core.Transfer;
@@ -173,7 +174,7 @@ public sealed partial class TransferService
 
         // Read every row that wrote or failed back from the remote: its state for the report, its last save for the
         // history. A failure is read too, because the remote may have saved it anyway (measured: a 500 can mean saved).
-        var (finalRows, readRequests, records) = await this.ReadBackAsync(remote, rows);
+        var (finalRows, readRequests, records) = await this.ReadBackAsync(remote, rows, plan.SourceJson);
         requests += readRequests;
 
         string? historyError = null;
@@ -181,7 +182,7 @@ public sealed partial class TransferService
         {
             try
             {
-                this.history.RecordToRemote(remote, userKey, records);
+                this.history.Record(remote, CopyDirection.ToRemote, userKey, records);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -344,7 +345,11 @@ public sealed partial class TransferService
     }
 
     // Not cancellable on purpose: what was written must reach the copy history even when the request was cancelled.
-    private async Task<(List<TransferRow> Rows, int Requests, List<CopyRecord> Records)> ReadBackAsync(RemoteDefinition remote, List<TransferRow> rows)
+    // The source's last save comes from the JSON this transfer's own plan read: the source is not written to.
+    private async Task<(List<TransferRow> Rows, int Requests, List<CopyRecord> Records)> ReadBackAsync(
+        RemoteDefinition remote,
+        List<TransferRow> rows,
+        IReadOnlyDictionary<Guid, string> sourceJson)
     {
         var finalRows = new List<TransferRow>();
         var records = new List<CopyRecord>();
@@ -378,7 +383,12 @@ public sealed partial class TransferService
             finalRows.Add(row with { TargetState = json is null ? "absent" : row.Row.Kind == PlanItemKind.Media ? "Saved" : DocumentStamp.States(json) });
             if (row.Result == TransferRowResult.Written && json is not null && DocumentStamp.LastUpdate(json) is { } saved)
             {
-                records.Add(new CopyRecord(row.Row.Key, row.Row.Outcome == PlanOutcome.Create ? "Create" : "Update", saved, row.Row.Kind));
+                records.Add(new CopyRecord(
+                    row.Row.Key,
+                    row.Row.Outcome == PlanOutcome.Create ? "Create" : "Update",
+                    saved,
+                    row.Row.Kind,
+                    DocumentStamp.LastUpdate(sourceJson[row.Row.Key])));
             }
         }
 

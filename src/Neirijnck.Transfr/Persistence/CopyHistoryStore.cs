@@ -17,7 +17,7 @@ public sealed class CopyHistoryStore
     // Rows per read while paging transfers: a page usually needs one read.
     private const int RowsPerRead = 500;
 
-    private const string ToRemote = "ToRemote";
+    private const string ToRemote = nameof(CopyDirection.ToRemote);
 
     private readonly IScopeProvider scopeProvider;
     private readonly TimeProvider timeProvider;
@@ -29,10 +29,10 @@ public sealed class CopyHistoryStore
     }
 
     /// <summary>
-    /// For each of these documents and media items copied from here to the remote before: the latest copy. Keys never
-    /// copied there are left out.
+    /// For each of these documents and media items copied between here and the remote before, either way: the latest
+    /// copy, with the baseline for a copy planned in <paramref name="planned"/> direction. Keys never copied are left out.
     /// </summary>
-    public IReadOnlyDictionary<Guid, LastCopy> LatestCopies(RemoteDefinition remote, IReadOnlyCollection<Guid> keys)
+    public IReadOnlyDictionary<Guid, LastCopy> LatestCopies(RemoteDefinition remote, IReadOnlyCollection<Guid> keys, CopyDirection planned)
     {
         ArgumentNullException.ThrowIfNull(remote);
         ArgumentNullException.ThrowIfNull(keys);
@@ -43,17 +43,13 @@ public sealed class CopyHistoryStore
         {
             foreach (var batch in keys.Distinct().Chunk(KeysPerQuery))
             {
-                rows.AddRange(scope.Database.Fetch<CopyHistoryDto>(
-                    "WHERE remote = @0 AND direction = @1 AND documentKey IN (@2)",
-                    identity,
-                    ToRemote,
-                    batch));
+                rows.AddRange(scope.Database.Fetch<CopyHistoryDto>("WHERE remote = @0 AND documentKey IN (@1)", identity, batch));
             }
         }
 
         return rows
             .GroupBy(row => row.DocumentKey)
-            .ToDictionary(group => group.Key, group => ToLastCopy(group.MaxBy(row => row.Id)!));
+            .ToDictionary(group => group.Key, group => ToLastCopy(group.MaxBy(row => row.Id)!, planned));
     }
 
     /// <summary>
@@ -92,17 +88,23 @@ public sealed class CopyHistoryStore
         }
     }
 
-    private static LastCopy ToLastCopy(CopyHistoryDto row)
-        => new(
-            DateTimeOffset.Parse(row.TargetUpdateDate, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
-            Utc(row.CopiedAt),
-            row.UserKey);
+    private static LastCopy ToLastCopy(CopyHistoryDto row, CopyDirection planned)
+    {
+        var recorded = new RecordedCopy(
+            Enum.Parse<CopyDirection>(row.Direction),
+            ParseDate(row.TargetUpdateDate),
+            string.IsNullOrEmpty(row.SourceUpdateDate) ? null : ParseDate(row.SourceUpdateDate));
+        return new LastCopy(CopyBaseline.TargetUpdate(recorded, planned), Utc(row.CopiedAt), row.UserKey, recorded.Direction);
+    }
+
+    private static DateTimeOffset ParseDate(string roundTrip)
+        => DateTimeOffset.Parse(roundTrip, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 
     // copiedAt is written as UTC; the database hands it back without a kind.
     private static DateTimeOffset Utc(DateTime copiedAt) => new(DateTime.SpecifyKind(copiedAt, DateTimeKind.Utc));
 
-    /// <summary>Records documents and media items just copied from here to the remote, all in one transaction.</summary>
-    public void RecordToRemote(RemoteDefinition remote, Guid userKey, IReadOnlyCollection<CopyRecord> records)
+    /// <summary>Records documents and media items just copied between here and the remote, all in one transaction.</summary>
+    public void Record(RemoteDefinition remote, CopyDirection direction, Guid userKey, IReadOnlyCollection<CopyRecord> records)
     {
         ArgumentNullException.ThrowIfNull(remote);
         ArgumentNullException.ThrowIfNull(records);
@@ -117,11 +119,12 @@ public sealed class CopyHistoryStore
                 Remote = identity,
                 DocumentKey = record.DocumentKey,
                 Kind = record.Kind.ToString(),
-                Direction = ToRemote,
+                Direction = direction.ToString(),
                 Outcome = record.Outcome,
                 UserKey = userKey,
                 CopiedAt = now,
                 TargetUpdateDate = record.TargetUpdateDate.ToString("O", CultureInfo.InvariantCulture),
+                SourceUpdateDate = record.SourceUpdateDate?.ToString("O", CultureInfo.InvariantCulture),
             });
         }
 
