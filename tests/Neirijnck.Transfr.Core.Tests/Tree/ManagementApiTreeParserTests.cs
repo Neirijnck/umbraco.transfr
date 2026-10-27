@@ -153,6 +153,45 @@ public sealed class ManagementApiTreeParserTests
     }
 
     [Fact]
+    public void ParseItemNodes_ReadsDocumentsWithTheirParentAndName()
+    {
+        var nodes = ManagementApiTreeParser.ParseItemNodes(Fixture("item-document.json"), "en-US");
+
+        Assert.Equal(new ItemNode(null, "Home"), nodes[Home]);
+        Assert.Equal(new ItemNode(Home, "About"), nodes[About]);
+        Assert.Equal(new ItemNode(Home, "News"), nodes[News]);
+        Assert.Equal(3, nodes.Count);
+    }
+
+    [Fact]
+    public void ParseItemNodes_ReadsMediaItemsToo()
+    {
+        // item/media for the Transfr Images folder and its children, captured from site B.
+        var images = new Guid("b6dadc1e-ef9f-4e30-b691-56333e16b6e4");
+
+        var nodes = ManagementApiTreeParser.ParseItemNodes(Fixture("item-media.json"), null);
+
+        Assert.Equal(new ItemNode(null, "Transfr Images"), nodes[images]);
+        Assert.Equal(new ItemNode(images, "Nested"), nodes[new Guid("3cc88c19-b246-4619-bb6e-f82025a270b1")]);
+        Assert.Equal(new ItemNode(images, "Red"), nodes[new Guid("38ee4805-3b53-4612-8ca0-fab7c6decd47")]);
+        Assert.Equal(3, nodes.Count);
+    }
+
+    [Fact]
+    public void ParseItemNodes_TakesTheCultureAskedFor_AndLeavesOutTrashedItems()
+    {
+        const string json = """
+            [{"isTrashed":false,"parent":null,"variants":[{"name":"Variantpagina","culture":"nl-BE"},{"name":"Variant Page","culture":"en-US"}],"id":"444a58ce-840f-46d2-8b8a-2fcdfc0916e4"},
+             {"isTrashed":true,"parent":{"id":"1371df8b-89da-4984-8cfb-501a72d1ad9d"},"variants":[{"name":"About","culture":null}],"id":"924c1efa-9b3d-4575-9106-166e6ed39ad1"}]
+            """;
+
+        var nodes = ManagementApiTreeParser.ParseItemNodes(json, "en-US");
+
+        Assert.Equal(new ItemNode(null, "Variant Page"), nodes[VariantPage]);
+        Assert.False(nodes.ContainsKey(About));
+    }
+
+    [Fact]
     public void ParseTreePage_GivesANodeWithoutANameAPlaceholder()
     {
         const string json = """{"total":1,"items":[{"id":"924c1efa-9b3d-4575-9106-166e6ed39ad1","hasChildren":false,"variants":[{"name":"","culture":null}]}]}""";

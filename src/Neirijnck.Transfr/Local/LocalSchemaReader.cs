@@ -40,6 +40,9 @@ public sealed class LocalSchemaReader
         this.serializerOptions = jsonOptions.Get(UmbracoConstants.JsonOptionsNames.BackOffice).JsonSerializerOptions;
     }
 
+    /// <summary>The key of the document type with this alias here, or null when there is none.</summary>
+    public Guid? DocumentTypeKeyByAlias(string alias) => this.contentTypeService.Get(alias)?.Key;
+
     /// <summary>
     /// The item's JSON, or null when it doesn't exist here.
     /// </summary>

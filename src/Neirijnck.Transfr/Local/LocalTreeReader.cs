@@ -77,6 +77,40 @@ public sealed class LocalTreeReader
             .ToDictionary(entity => entity.Key, entity => this.ParentKeyOf(entity, objectType));
     }
 
+    /// <summary>
+    /// <see cref="Locate"/> for documents, plus whether each is published here in some culture.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, ItemLocation> LocateDocuments(IReadOnlyCollection<Guid> keys)
+    {
+        if (keys.Count == 0)
+        {
+            return new Dictionary<Guid, ItemLocation>();
+        }
+
+        return this.entityService.GetAll(UmbracoObjectTypes.Document, keys.ToArray())
+            .Where(entity => !entity.Trashed)
+            .ToDictionary(
+                entity => entity.Key,
+                entity => new ItemLocation(this.ParentKeyOf(entity, UmbracoObjectTypes.Document), entity is IDocumentEntitySlim { Published: true }));
+    }
+
+    /// <summary>
+    /// Where these media items are here, keeping the trashed ones (without their recycle bin parent), as
+    /// <see cref="ManagementApiTreeParser.ParseMediaItems"/> reads them on a remote. Unknown keys are left out.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, (Guid? ParentKey, bool IsTrashed)> LocateMedia(IReadOnlyCollection<Guid> keys)
+    {
+        if (keys.Count == 0)
+        {
+            return new Dictionary<Guid, (Guid? ParentKey, bool IsTrashed)>();
+        }
+
+        return this.entityService.GetAll(UmbracoObjectTypes.Media, keys.ToArray())
+            .ToDictionary(
+                entity => entity.Key,
+                entity => entity.Trashed ? ((Guid?)null, true) : (this.ParentKeyOf(entity, UmbracoObjectTypes.Media), false));
+    }
+
     private static UmbracoObjectTypes ObjectTypeOf(PlanItemKind kind) => kind == PlanItemKind.Media ? UmbracoObjectTypes.Media : UmbracoObjectTypes.Document;
 
     /// <summary>

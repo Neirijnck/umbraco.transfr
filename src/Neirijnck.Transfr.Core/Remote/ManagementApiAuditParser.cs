@@ -16,6 +16,12 @@ public static class ManagementApiAuditParser
         "New", "Save", "SaveVariant", "Publish", "PublishVariant", "Unpublish", "UnpublishVariant", "RollBack",
     };
 
+    /// <summary>
+    /// Whether an audit entry of this type (Umbraco's <c>AuditType</c> name, as the audit log's <c>logType</c> gives it)
+    /// changed a document's or media item's content or publish state.
+    /// </summary>
+    public static bool IsContentChange(string logType) => ContentChanges.Contains(logType);
+
     /// <summary>The newest content change in an audit log page that lists newest first, or null when it has none.</summary>
     /// <exception cref="JsonException">Not valid JSON.</exception>
     public static RemoteChange? LatestChange(string json)
@@ -29,7 +35,7 @@ public static class ManagementApiAuditParser
         foreach (var item in items.EnumerateArray())
         {
             var logType = item.TryGetProperty("logType", out var type) ? type.GetString() : null;
-            if (logType is null || !ContentChanges.Contains(logType)
+            if (logType is null || !IsContentChange(logType)
                 || !item.TryGetProperty("user", out var user) || !user.TryGetProperty("id", out var id) || !id.TryGetGuid(out var userKey)
                 || !item.TryGetProperty("timestamp", out var timestamp)
                 || !DateTimeOffset.TryParse(timestamp.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at))

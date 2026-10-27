@@ -1,7 +1,4 @@
-﻿using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Net;
-using System.Text.Json;
+﻿using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Neirijnck.Transfr.Compare;
@@ -17,16 +14,14 @@ using Umbraco.Cms.Core.Services;
 namespace Neirijnck.Transfr.Planning;
 
 /// <summary>
-/// Builds the dry run of copying a selection from here to a remote: expands the selection, reads everything
-/// <see cref="CopyPlanner"/> decides on from both sides, and looks up the names the view needs. It only reads.
+/// Builds the dry run of copying a selection between here and a remote, either way: expands the selection on the source,
+/// reads everything <see cref="CopyPlanner"/> decides on from both sides, and looks up the names the view needs. It only
+/// reads.
 /// </summary>
 public sealed partial class CopyPlanService
 {
     /// <summary>Documents and picked media items per plan: each costs a request on both sides.</summary>
     public const int MaxDocuments = 2000;
-
-    // Remote document requests in flight at once, as for a tree compare.
-    private const int MaxParallelDocumentRequests = 4;
 
     private readonly LocalTreeReader localTree;
     private readonly RemoteTreeReader remoteTree;
@@ -40,6 +35,8 @@ public sealed partial class CopyPlanService
     private readonly RemoteAuditReader audit;
     private readonly ILanguageService languageService;
     private readonly IUserService userService;
+    private readonly IAuditService auditService;
+    private readonly IUserIdKeyResolver userIdKeyResolver;
     private readonly ILogger<CopyPlanService> logger;
 
     public CopyPlanService(
@@ -55,6 +52,8 @@ public sealed partial class CopyPlanService
         RemoteAuditReader audit,
         ILanguageService languageService,
         IUserService userService,
+        IAuditService auditService,
+        IUserIdKeyResolver userIdKeyResolver,
         ILogger<CopyPlanService> logger)
     {
         this.localTree = localTree;
@@ -69,30 +68,47 @@ public sealed partial class CopyPlanService
         this.audit = audit;
         this.languageService = languageService;
         this.userService = userService;
+        this.auditService = auditService;
+        this.userIdKeyResolver = userIdKeyResolver;
         this.logger = logger;
     }
 
-    /// <exception cref="PlanSelectionException">A selected document doesn't exist here, or the selection is too large.</exception>
-    public async Task<CopyPlanResult> PlanAsync(RemoteDefinition remote, IReadOnlyList<PlanSelection> selection, CancellationToken cancellationToken)
+    /// <param name="remote">The remote copied to or from.</param>
+    /// <param name="direction">ToRemote reads the selection here, FromRemote on the remote.</param>
+    /// <param name="selection">The documents and media items on the source.</param>
+    /// <param name="cancellationToken">Stops the reads.</param>
+    /// <exception cref="PlanSelectionException">A selected item doesn't exist on the source, or the selection is too large.</exception>
+    public async Task<CopyPlanResult> PlanAsync(
+        RemoteDefinition remote,
+        CopyDirection direction,
+        IReadOnlyList<PlanSelection> selection,
+        CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
+        var (source, target) = direction == CopyDirection.FromRemote
+            ? ((IPlanSource)new RemotePlanSource(remote, this.remoteTree, this.remoteDocuments, this.remoteMedia),
+                (IPlanTarget)new LocalPlanTarget(this.localTree, this.localDocuments, this.localMediaReader, this.auditService, this.userIdKeyResolver, this.userService, this.logger))
+            : (new LocalPlanSource(this.localTree, this.localDocuments, this.localMediaReader),
+                new RemotePlanTarget(remote, this.remoteTree, this.remoteDocuments, this.remoteMedia, this.audit, this.logger));
         var culture = await this.languageService.GetDefaultIsoCodeAsync();
         var documentChoices = selection.Where(choice => choice.Kind == PlanItemKind.Document).ToList();
-        var (nodes, wholeNodes) = this.Expand(documentChoices, culture);
-        var pickedMedia = this.ExpandMedia(selection.Where(choice => choice.Kind == PlanItemKind.Media).ToList(), nodes.Count);
+        var (expanded, wholeNodes) = await Expand(source, documentChoices, culture, cancellationToken);
+
+        // The planner takes its sources parents first. Here the depth sorts the choices that way already; a remote's
+        // item responses carry no depth, so this puts a node picked before its parent after it.
+        var nodes = ParentsFirst.Order(expanded, node => node.Key, node => node.ParentKey);
+        var pickedMedia = await ExpandMedia(source, selection.Where(choice => choice.Kind == PlanItemKind.Media).ToList(), nodes.Count, cancellationToken);
         var fields = FieldSelection.Resolve(documentChoices.Select(choice => (choice.Key, choice.Fields)), wholeNodes);
 
-        // Local reads one at a time: Umbraco's ambient scope is not thread-safe.
-        var sources = new List<SourceDocument>();
-        foreach (var node in nodes)
+        var sourceJson = await source.ReadDocumentsAsync(nodes.Select(node => node.Key).ToList(), cancellationToken);
+        var unreadable = nodes.Select(node => node.Key).Where(key => !sourceJson.ContainsKey(key)).ToList();
+        if (unreadable.Count > 0)
         {
-            var json = await this.localDocuments.ReadAsync(node.Key)
-                ?? throw new PlanSelectionException("A selected document could not be read here.", [node.Key]);
-            sources.Add(new SourceDocument(node.Key, node.ParentKey, node.Name, json, fields.GetValueOrDefault(node.Key)));
+            throw new PlanSelectionException($"A selected document could not be read {source.Place}.", unreadable);
         }
 
-        var remoteJson = await this.ReadRemoteDocumentsAsync(remote, sources, cancellationToken);
-        var requests = sources.Count;
+        var sources = nodes.Select(node => new SourceDocument(node.Key, node.ParentKey, node.Name, sourceJson[node.Key], fields.GetValueOrDefault(node.Key))).ToList();
+        var remoteJson = await target.ReadDocumentsAsync(sources.Select(item => item.Key).ToList(), cancellationToken);
 
         var references = sources.SelectMany(source => ReferenceExtractor.Extract(source.Json)).ToList();
         var documentKeys = sources.Select(source => source.Key)
@@ -100,52 +116,47 @@ public sealed partial class CopyPlanService
             .Concat(references.Where(reference => reference.Kind == ReferenceKind.Document).Select(reference => reference.Key))
             .Distinct()
             .ToList();
-        var (onTarget, locateRequests) = await this.remoteTree.LocateDocumentsAsync(remote, documentKeys, cancellationToken);
-        requests += locateRequests;
+        var onTarget = await target.LocateDocumentsAsync(documentKeys, cancellationToken);
 
         // Every source's parent, on both sides: a namesake on the target blocks a new node, and the order here is where
         // copied nodes are placed there. A parent that isn't on the target has no children there yet.
         var siblings = new List<TargetSibling>();
         var localSiblings = new List<LocalSibling>();
-        foreach (var parentKey in sources.Select(source => source.ParentKey).Distinct())
+        foreach (var parentKey in sources.Select(item => item.ParentKey).Distinct())
         {
-            localSiblings.AddRange(this.localTree.ReadLevel(parentKey, culture).Select(child => new LocalSibling(parentKey, child.Key)));
+            var children = await source.ReadLevelAsync(parentKey, culture, PlanItemKind.Document, cancellationToken);
+            localSiblings.AddRange(children.Select(child => new LocalSibling(parentKey, child.Key)));
             if (parentKey is null || onTarget.ContainsKey(parentKey.Value))
             {
-                var (children, readRequests) = await this.remoteTree.ReadLevelAsync(remote, parentKey, culture, cancellationToken);
-                requests += readRequests;
-                siblings.AddRange(children.Select(child => new TargetSibling(parentKey, child.Key, child.Name)));
+                var targetChildren = await target.ReadLevelAsync(parentKey, culture, cancellationToken);
+                siblings.AddRange(targetChildren.Select(child => new TargetSibling(parentKey, child.Key, child.Name)));
             }
         }
 
         var documentTypes = sources.Select(source => DocumentTypeOf(source.Json)).OfType<Guid>().Distinct().ToList();
         var schema = await this.schemaChecks.CheckAsync(remote, documentTypes, cancellationToken);
-        requests += schema.RemoteRequests;
+        var requests = schema.RemoteRequests;
 
-        // The media picked and the media the documents reference, and the folders above them: read here one at a time
-        // (ambient scope), then located on the target, each wanted one there read whole to compare, and their media types
-        // checked.
+        // The media picked and the media the documents reference, and the folders above them: read on the source, then
+        // located on the target, each wanted one there read whole to compare, and their media types checked.
         var mediaKeys = pickedMedia
             .Concat(references.Where(reference => reference.Kind == ReferenceKind.Media).Select(reference => reference.Key))
             .Distinct()
             .ToList();
-        var localMedia = new Dictionary<Guid, LocalMediaItem>();
-        foreach (var (key, node) in this.localTree.MediaChains(mediaKeys))
-        {
-            // Gone since its chain was read: left out, like an unknown item.
-            if (await this.localMediaReader.ReadAsync(key) is { } json)
-            {
-                localMedia[key] = new LocalMediaItem(key, node.ParentKey, node.Name, json);
-            }
-        }
+        var chains = await source.MediaChainsAsync(mediaKeys, cancellationToken);
+        var mediaJson = await source.ReadMediaAsync(chains.Keys.ToList(), cancellationToken);
 
-        var (targetMedia, mediaRequests) = await this.ReadTargetMediaAsync(remote, mediaKeys, localMedia, cancellationToken);
-        requests += mediaRequests;
+        // Gone since its chain was read: left out, like an unknown item.
+        var localMedia = chains
+            .Where(pair => mediaJson.ContainsKey(pair.Key))
+            .ToDictionary(pair => pair.Key, pair => new LocalMediaItem(pair.Key, pair.Value.ParentKey, pair.Value.Name, mediaJson[pair.Key]));
+
+        var targetMedia = await ReadTargetMediaAsync(target, mediaKeys, localMedia, cancellationToken);
         var mediaTypes = localMedia.Values.Select(item => MediaTypeOf(item.Json)).OfType<Guid>().Distinct().ToList();
         var (mediaSchema, mediaSchemaRequests) = await this.schemaChecks.CheckMediaTypesAsync(remote, mediaTypes, cancellationToken);
         requests += mediaSchemaRequests;
 
-        var lastCopies = this.history.LatestCopies(remote, sources.Select(source => source.Key).Concat(localMedia.Keys).ToList(), CopyDirection.ToRemote);
+        var lastCopies = this.history.LatestCopies(remote, sources.Select(item => item.Key).Concat(localMedia.Keys).ToList(), direction);
         var rows = CopyPlanner.Plan(new CopyPlanFacts
         {
             Sources = sources,
@@ -168,12 +179,12 @@ public sealed partial class CopyPlanService
         });
 
         var conflicts = rows.Where(row => row.Outcome == PlanOutcome.Conflict).Select(row => (row.Kind, row.Key)).ToList();
-        var (changes, changeRequests) = await this.ReadRemoteChangesAsync(remote, conflicts, cancellationToken);
-        requests += changeRequests;
+        var changes = await target.LastChangesAsync(conflicts, cancellationToken);
+        requests += source.Requests + target.Requests;
 
-        var result = this.Describe(rows, siblings, localMedia, schema, culture, requests) with
+        var result = await this.Describe(source, rows, siblings, localMedia, schema, culture, requests, cancellationToken) with
         {
-            SourceJson = sources.ToDictionary(source => source.Key, source => source.Json)
+            SourceJson = sources.ToDictionary(item => item.Key, item => item.Json)
                 .Concat(localMedia.ToDictionary(pair => pair.Key, pair => pair.Value.Json))
                 .ToDictionary(),
             TargetJson = remoteJson
@@ -185,19 +196,23 @@ public sealed partial class CopyPlanService
         var create = rows.Count(row => row.Outcome == PlanOutcome.Create);
         var conflict = rows.Count(row => row.Outcome == PlanOutcome.Conflict);
         var blocked = rows.Count(row => row.Outcome == PlanOutcome.Blocked);
-        LogPlanned(this.logger, remote.Alias, rows.Count, create, conflict, blocked, requests, stopwatch.ElapsedMilliseconds);
+        LogPlanned(this.logger, direction, remote.Alias, rows.Count, create, conflict, blocked, requests, stopwatch.ElapsedMilliseconds);
         return result;
     }
 
     // The selected documents and, where asked, everything below them: parents before their children. Also the nodes the
     // selection holds whole (picked without fields, or below a node picked with everything below it).
-    private (List<LocalNode> Nodes, HashSet<Guid> WholeNodes) Expand(IReadOnlyList<PlanSelection> selection, string? culture)
+    private static async Task<(List<LocalNode> Nodes, HashSet<Guid> WholeNodes)> Expand(
+        IPlanSource source,
+        IReadOnlyList<PlanSelection> selection,
+        string? culture,
+        CancellationToken cancellationToken)
     {
-        var selected = this.localTree.Describe(selection.Select(choice => choice.Key).Distinct().ToList(), culture);
+        var selected = await source.DescribeDocumentsAsync(selection.Select(choice => choice.Key).Distinct().ToList(), culture, cancellationToken);
         var missing = selection.Select(choice => choice.Key).Where(key => !selected.ContainsKey(key)).Distinct().ToList();
         if (missing.Count > 0)
         {
-            throw new PlanSelectionException("Some selected documents don't exist here, or are in the recycle bin.", missing);
+            throw new PlanSelectionException($"Some selected documents don't exist {source.Place}, or are in the recycle bin.", missing);
         }
 
         var nodes = new List<LocalNode>();
@@ -221,7 +236,7 @@ public sealed partial class CopyPlanService
             if (choice.IncludeDescendants)
             {
                 var first = nodes.Count;
-                this.AddDescendants(node, culture, nodes, seen);
+                await AddDescendants(source, node, culture, nodes, seen, cancellationToken);
                 wholeNodes.UnionWith(nodes.Skip(first).Select(descendant => descendant.Key));
             }
 
@@ -236,18 +251,18 @@ public sealed partial class CopyPlanService
 
     // The media picked for the copy and, where asked, everything below them: parents before their children. Counted with
     // the documents against the plan's limit.
-    private List<Guid> ExpandMedia(List<PlanSelection> selection, int documents)
+    private static async Task<List<Guid>> ExpandMedia(IPlanSource source, List<PlanSelection> selection, int documents, CancellationToken cancellationToken)
     {
         if (selection.Count == 0)
         {
             return [];
         }
 
-        var here = this.localTree.MediaNames(selection.Select(choice => choice.Key).Distinct().ToList());
+        var here = await source.MediaNamesAsync(selection.Select(choice => choice.Key).Distinct().ToList(), cancellationToken);
         var missing = selection.Select(choice => choice.Key).Where(key => !here.ContainsKey(key)).Distinct().ToList();
         if (missing.Count > 0)
         {
-            throw new PlanSelectionException("Some selected media items don't exist here, or are in the recycle bin.", missing);
+            throw new PlanSelectionException($"Some selected media items don't exist {source.Place}, or are in the recycle bin.", missing);
         }
 
         var keys = new List<Guid>();
@@ -261,7 +276,7 @@ public sealed partial class CopyPlanService
 
             if (choice.IncludeDescendants)
             {
-                this.AddMediaDescendants(choice.Key, keys, seen, documents);
+                await AddMediaDescendants(source, choice.Key, keys, seen, documents, cancellationToken);
             }
 
             if (documents + keys.Count > MaxDocuments)
@@ -273,9 +288,9 @@ public sealed partial class CopyPlanService
         return keys;
     }
 
-    private void AddMediaDescendants(Guid parentKey, List<Guid> keys, HashSet<Guid> seen, int documents)
+    private static async Task AddMediaDescendants(IPlanSource source, Guid parentKey, List<Guid> keys, HashSet<Guid> seen, int documents, CancellationToken cancellationToken)
     {
-        foreach (var child in this.localTree.ReadLevel(parentKey, null, PlanItemKind.Media))
+        foreach (var child in await source.ReadLevelAsync(parentKey, null, PlanItemKind.Media, cancellationToken))
         {
             if (seen.Add(child.Key))
             {
@@ -289,14 +304,14 @@ public sealed partial class CopyPlanService
 
             if (child.HasChildren)
             {
-                this.AddMediaDescendants(child.Key, keys, seen, documents);
+                await AddMediaDescendants(source, child.Key, keys, seen, documents, cancellationToken);
             }
         }
     }
 
-    private void AddDescendants(LocalNode parent, string? culture, List<LocalNode> nodes, HashSet<Guid> seen)
+    private static async Task AddDescendants(IPlanSource source, LocalNode parent, string? culture, List<LocalNode> nodes, HashSet<Guid> seen, CancellationToken cancellationToken)
     {
-        foreach (var child in this.localTree.ReadLevel(parent.Key, culture))
+        foreach (var child in await source.ReadLevelAsync(parent.Key, culture, PlanItemKind.Document, cancellationToken))
         {
             var node = new LocalNode(child.Key, parent.Key, child.Name, parent.Level + 1);
             if (seen.Add(node.Key))
@@ -311,63 +326,28 @@ public sealed partial class CopyPlanService
 
             if (child.HasChildren)
             {
-                this.AddDescendants(node, culture, nodes, seen);
+                await AddDescendants(source, node, culture, nodes, seen, cancellationToken);
             }
         }
     }
 
-    // The remote's copy of every source: absent when it isn't there (404). Any other failure fails the plan.
-    private async Task<IReadOnlyDictionary<Guid, string>> ReadRemoteDocumentsAsync(
-        RemoteDefinition remote,
-        IReadOnlyList<SourceDocument> sources,
-        CancellationToken cancellationToken)
-    {
-        var found = new ConcurrentDictionary<Guid, string>();
-        var options = new ParallelOptions { MaxDegreeOfParallelism = MaxParallelDocumentRequests, CancellationToken = cancellationToken };
-        await Parallel.ForEachAsync(sources, options, async (source, token) =>
-        {
-            try
-            {
-                found[source.Key] = await this.remoteDocuments.ReadAsync(remote, source.Key, token);
-            }
-            catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.NotFound)
-            {
-                // Not on the remote: a node to create.
-            }
-        });
-
-        return found;
-    }
-
-    // The target's copies of the media here: located in item batches (trashed ones included; the referenced keys missing
-    // here too, so a note can say that), and each referenced one that is there read whole, to compare. One that is gone
-    // between the two reads counts as not there. Any other failure fails the plan, as for documents.
-    private async Task<(IReadOnlyDictionary<Guid, TargetMediaItem> Items, int Requests)> ReadTargetMediaAsync(
-        RemoteDefinition remote,
+    // The target's copies of the media on the source: located in item batches (trashed ones included; the referenced keys
+    // missing on the source too, so a note can say that), and each referenced one that is there read whole, to compare.
+    // One that is gone between the two reads counts as not there. Any other failure fails the plan, as for documents.
+    private static async Task<IReadOnlyDictionary<Guid, TargetMediaItem>> ReadTargetMediaAsync(
+        IPlanTarget target,
         List<Guid> referencedKeys,
         IReadOnlyDictionary<Guid, LocalMediaItem> localMedia,
         CancellationToken cancellationToken)
     {
         if (referencedKeys.Count == 0)
         {
-            return (new Dictionary<Guid, TargetMediaItem>(), 0);
+            return new Dictionary<Guid, TargetMediaItem>();
         }
 
-        var (located, requests) = await this.remoteTree.LocateMediaAsync(remote, referencedKeys.Union(localMedia.Keys).ToList(), cancellationToken);
+        var located = await target.LocateMediaAsync(referencedKeys.Union(localMedia.Keys).ToList(), cancellationToken);
         var toRead = referencedKeys.Where(key => localMedia.ContainsKey(key) && located.TryGetValue(key, out var item) && !item.IsTrashed).ToList();
-        var found = new ConcurrentDictionary<Guid, string>();
-        var options = new ParallelOptions { MaxDegreeOfParallelism = MaxParallelDocumentRequests, CancellationToken = cancellationToken };
-        await Parallel.ForEachAsync(toRead, options, async (key, token) =>
-        {
-            try
-            {
-                found[key] = await this.remoteMedia.ReadAsync(remote, key, token);
-            }
-            catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.NotFound)
-            {
-                // Gone since it was located: not there.
-            }
-        });
+        var found = await target.ReadMediaAsync(toRead, cancellationToken);
 
         var items = new Dictionary<Guid, TargetMediaItem>();
         foreach (var (key, item) in located)
@@ -379,58 +359,7 @@ public sealed partial class CopyPlanService
             }
         }
 
-        return (items, requests + toRead.Count);
-    }
-
-    // Who last changed each conflicting document or media item on the remote. Only an explanation: a read that fails is
-    // logged and left out, never failing the plan.
-    private async Task<(IReadOnlyDictionary<Guid, RemoteChangeInfo> Changes, int Requests)> ReadRemoteChangesAsync(
-        RemoteDefinition remote,
-        List<(PlanItemKind Kind, Guid Key)> keys,
-        CancellationToken cancellationToken)
-    {
-        if (keys.Count == 0)
-        {
-            return (new Dictionary<Guid, RemoteChangeInfo>(), 0);
-        }
-
-        var found = new ConcurrentDictionary<Guid, RemoteChange>();
-        var options = new ParallelOptions { MaxDegreeOfParallelism = MaxParallelDocumentRequests, CancellationToken = cancellationToken };
-        await Parallel.ForEachAsync(keys, options, async (item, token) =>
-        {
-            var (kind, key) = item;
-            try
-            {
-                if (await this.audit.LastChangeAsync(remote, kind, key, token) is { } change)
-                {
-                    found[key] = change;
-                }
-            }
-            catch (Exception exception) when (IsUnreadable(exception, token))
-            {
-                LogChangeUnread(this.logger, exception, remote.Alias, kind, key);
-            }
-        });
-
-        var requests = keys.Count;
-        IReadOnlyDictionary<Guid, string> names = new Dictionary<Guid, string>();
-        if (!found.IsEmpty)
-        {
-            try
-            {
-                (names, var nameRequests) = await this.audit.UserNamesAsync(remote, found.Values.Select(change => change.UserKey).ToList(), cancellationToken);
-                requests += nameRequests;
-            }
-            catch (Exception exception) when (IsUnreadable(exception, cancellationToken))
-            {
-                LogUserNamesUnread(this.logger, exception, remote.Alias);
-            }
-        }
-
-        var changes = found.ToDictionary(
-            pair => pair.Key,
-            pair => new RemoteChangeInfo(names.GetValueOrDefault(pair.Value.UserKey), pair.Value.At, pair.Value.LogType));
-        return (changes, requests);
+        return items;
     }
 
     // The latest copies with the names of the users here who ran them.
@@ -446,18 +375,15 @@ public sealed partial class CopyPlanService
         return lastCopies.ToDictionary(pair => pair.Key, pair => new LastCopyInfo(names.GetValueOrDefault(pair.Value.UserKey), pair.Value.CopiedAt));
     }
 
-    // A refused or failed remote read, an unexpected answer, or a timeout; not the caller cancelling.
-    private static bool IsUnreadable(Exception exception, CancellationToken cancellationToken)
-        => exception is HttpRequestException or JsonException or InvalidOperationException or RemoteAuthenticationException
-            || (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested);
-
-    private CopyPlanResult Describe(
+    private async Task<CopyPlanResult> Describe(
+        IPlanSource source,
         IReadOnlyList<PlanRow> rows,
         IReadOnlyList<TargetSibling> siblings,
         IReadOnlyDictionary<Guid, LocalMediaItem> localMedia,
         SchemaLevelCheck schema,
         string? culture,
-        int requests)
+        int requests,
+        CancellationToken cancellationToken)
     {
         var notes = rows.SelectMany(row => row.Notes).Where(note => note.Key is not null).ToList();
         var documentKeys = notes
@@ -466,7 +392,7 @@ public sealed partial class CopyPlanService
             .Select(note => note.Key!.Value)
             .Distinct()
             .ToList();
-        var documentsHere = this.localTree.Describe(documentKeys, culture);
+        var documentsHere = await source.DescribeDocumentsAsync(documentKeys, culture, cancellationToken);
 
         var names = new Dictionary<Guid, string>();
         foreach (var (key, node) in documentsHere)
@@ -530,12 +456,7 @@ public sealed partial class CopyPlanService
     private static Guid? MediaTypeOf(string mediaJson)
         => Guid.TryParse(JsonNode.Parse(mediaJson)?["mediaType"]?["id"]?.GetValue<string>(), out var key) ? key : null;
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Planned a copy to remote {Alias}: {Rows} rows ({Create} to create, {Conflict} conflicts, {Blocked} blocked), {Requests} remote requests, {Milliseconds} ms")]
-    private static partial void LogPlanned(ILogger logger, string alias, int rows, int create, int conflict, int blocked, int requests, long milliseconds);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Planned a copy {Direction} {Alias}: {Rows} rows ({Create} to create, {Conflict} conflicts, {Blocked} blocked), {Requests} remote requests, {Milliseconds} ms")]
+    private static partial void LogPlanned(ILogger logger, CopyDirection direction, string alias, int rows, int create, int conflict, int blocked, int requests, long milliseconds);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not read who last changed {Kind} {Key} on remote {Alias}")]
-    private static partial void LogChangeUnread(ILogger logger, Exception exception, string alias, PlanItemKind kind, Guid key);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not read user names on remote {Alias}")]
-    private static partial void LogUserNamesUnread(ILogger logger, Exception exception, string alias);
 }

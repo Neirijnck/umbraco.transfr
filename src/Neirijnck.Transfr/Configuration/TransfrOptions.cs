@@ -15,4 +15,10 @@ public sealed class TransfrOptions
     /// Development and Local environments, so a deployed site doesn't get the UI unless it is switched on.
     /// </summary>
     public bool? AllowRuntimeRemotes { get; set; }
+
+    /// <summary>
+    /// Whether administrators may copy from a remote to this environment. Unset means: only in the Development and Local
+    /// environments, so a deployed site doesn't take in content unless it is switched on.
+    /// </summary>
+    public bool? AllowPull { get; set; }
 }

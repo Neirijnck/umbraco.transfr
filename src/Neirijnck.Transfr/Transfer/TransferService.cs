@@ -107,7 +107,7 @@ public sealed partial class TransferService
         CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
-        var plan = await this.plans.PlanAsync(remote, selection, cancellationToken);
+        var plan = await this.plans.PlanAsync(remote, CopyDirection.ToRemote, selection, cancellationToken);
         var requests = plan.RemoteRequests;
 
         var drift = PlanCheck.Compare(plan.Rows, dryRun);

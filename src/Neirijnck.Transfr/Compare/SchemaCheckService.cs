@@ -79,6 +79,25 @@ public sealed class SchemaCheckService
             }
         }
 
+        // The other way round, for types read from the remote (a copy from there, a node only there): one missing here
+        // whose alias is here under another key.
+        var missingHere = checks.Values
+            .SelectMany(check => check.Problems)
+            .Where(problem => problem.Kind == SchemaItemKind.DocumentType && problem.Reason == SchemaProblemReason.MissingLocally)
+            .DistinctBy(problem => problem.Key);
+        foreach (var problem in missingHere)
+        {
+            var (remoteJson, read) = await this.ReadRemoteAsync(remote, SchemaItemKind.DocumentType, problem.Key, cancellationToken);
+            requests += read ? 1 : 0;
+            var alias = remoteJson is null ? null : ManagementApiSchemaParser.ParseAlias(remoteJson);
+            if (alias is not null && problem.Name is not null && this.localSchema.DocumentTypeKeyByAlias(alias) is { } localKey && localKey != problem.Key)
+            {
+                separateInstall.Add(new SeparateInstallEvidence(alias, problem.Name, localKey, problem.Key));
+            }
+        }
+
+        // Found both ways (a node on each side), the same pair is told once.
+        separateInstall = [.. separateInstall.DistinctBy(evidence => (evidence.Alias, evidence.LocalKey, evidence.RemoteKey))];
         return new SchemaLevelCheck(checks, separateInstall, requests);
     }
 

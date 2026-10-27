@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Neirijnck.Transfr.Compare;
+using Neirijnck.Transfr.Core.History;
 using Neirijnck.Transfr.Core.Planning;
 using Neirijnck.Transfr.Core.Remote;
 using Neirijnck.Transfr.Core.Transfer;
@@ -139,8 +140,10 @@ public partial class CompareController : TransfrApiControllerBase
         });
 
     /// <summary>
-    /// The dry run of copying the selected documents (each with or without everything below it) from here to the
-    /// remote. It only reads, on both sides. 400 when the selection is empty, unknown here or too large.
+    /// The dry run of copying the selected documents (each with or without everything below it) and media items between
+    /// here and the remote, from here unless Direction is FromRemote. It only reads, on both sides. 400 when the
+    /// selection is empty, unknown on the source or too large, when the direction is unknown, or when copying from the
+    /// remote is not allowed here (Transfr:AllowPull).
     /// </summary>
     [HttpPost("remotes/{alias}/plan")]
     [ProducesResponseType<CopyPlanResponseModel>(StatusCodes.Status200OK)]
@@ -160,11 +163,17 @@ public partial class CompareController : TransfrApiControllerBase
             return this.Problem(title: "The selection can't be read", detail: invalid, statusCode: StatusCodes.Status400BadRequest);
         }
 
+        var (direction, refused) = this.ReadDirection(request.Direction);
+        if (refused is not null)
+        {
+            return refused;
+        }
+
         return await this.CompareWithAsync(alias, null, async remote =>
         {
             try
             {
-                return this.Ok(PlanResponses.From(await this.copyPlan.PlanAsync(remote, selection, cancellationToken)));
+                return this.Ok(PlanResponses.From(await this.copyPlan.PlanAsync(remote, direction, selection, cancellationToken)));
             }
             catch (PlanSelectionException exception)
             {
@@ -225,6 +234,25 @@ public partial class CompareController : TransfrApiControllerBase
                 return this.Problem(title: "The transfer can't be planned", detail: exception.Message + keys, statusCode: StatusCodes.Status400BadRequest);
             }
         });
+    }
+
+    // ToRemote when left out; a 400 for an unknown direction, or for copying to here where that is switched off.
+    private (CopyDirection Direction, IActionResult? Refused) ReadDirection(string? direction)
+    {
+        if (direction is not (null or nameof(CopyDirection.ToRemote) or nameof(CopyDirection.FromRemote)))
+        {
+            return (CopyDirection.ToRemote, this.Problem(title: "The direction can't be read", detail: $"The direction is ToRemote or FromRemote, not {direction}.", statusCode: StatusCodes.Status400BadRequest));
+        }
+
+        if (direction == nameof(CopyDirection.FromRemote) && !this.registry.PullAllowed)
+        {
+            return (CopyDirection.FromRemote, this.Problem(
+                title: "Copying from a remote to this environment is switched off here",
+                detail: "Set Transfr:AllowPull to true to allow it.",
+                statusCode: StatusCodes.Status400BadRequest));
+        }
+
+        return (direction == nameof(CopyDirection.FromRemote) ? CopyDirection.FromRemote : CopyDirection.ToRemote, null);
     }
 
     // Finds the user's remote (404 when unknown) and turns a refused sign-in or a failed remote read into a 502.

@@ -23,8 +23,12 @@ public sealed class RemoteRegistry
     }
 
     public bool RuntimeRemotesAllowed
-        => this.options.CurrentValue.AllowRuntimeRemotes
-            ?? (this.hostEnvironment.IsDevelopment() || this.hostEnvironment.IsEnvironment("Local"));
+        => this.options.CurrentValue.AllowRuntimeRemotes ?? this.IsDevelopmentOrLocal;
+
+    /// <summary>Whether copying from a remote to this environment is allowed here (<see cref="TransfrOptions.AllowPull"/>).</summary>
+    public bool PullAllowed => this.options.CurrentValue.AllowPull ?? this.IsDevelopmentOrLocal;
+
+    private bool IsDevelopmentOrLocal => this.hostEnvironment.IsDevelopment() || this.hostEnvironment.IsEnvironment("Local");
 
     /// <summary>
     /// Whether Transfr is available here at all: some remote is configured, or remotes may be connected at runtime.
