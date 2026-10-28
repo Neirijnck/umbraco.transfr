@@ -520,15 +520,13 @@ export class TransfrContentCompareElement extends UmbLitElement {
     </uui-button-group>`;
   }
 
-  // What is picked for a copy (in both views), and the way to its dry run. Hidden until something is picked; then it
-  // stays in view while the trees scroll.
+  // What is picked for a copy (in both views), and the way to its dry run; it stays in view while the trees scroll.
+  // Always there, so the trees don't jump down at the first tick: with nothing picked its buttons are hidden but keep
+  // their space (not disabled: a disabled primary button looks the same as an enabled one).
   #renderSelectionBar(remoteName: string) {
     const batch = this.#batch();
-    if (isEmptyBatch(batch)) {
-      return nothing;
-    }
-
-    return html`<div class="banner selection" role="status" data-test="selection">
+    const empty = isEmptyBatch(batch);
+    return html`<div class="banner selection ${empty ? 'none-picked' : ''}" role="status" data-test="selection">
       <umb-icon name="icon-checkbox"></umb-icon>
       <span>${describeBatch(batch)}.</span>
       <uui-button look="secondary" label="Clear selection" @click=${() => this.#setBatch(EMPTY_BATCH)}></uui-button>
@@ -1196,6 +1194,11 @@ export class TransfrContentCompareElement extends UmbLitElement {
       .banner.selection > umb-icon {
         color: var(--transfr-color-brand);
         font-size: 1.25em;
+      }
+
+      /* Not ".empty": that class greys and italicises an empty level's text elsewhere in this view. */
+      .banner.selection.none-picked uui-button {
+        visibility: hidden;
       }
 
       .doc {
