@@ -4,6 +4,8 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 ## [Unreleased]
 
+## [17.3.1] - 2026-10-28
+
 ### Added
 
 - Fields from a remote: with From chosen, tick the names and properties that differ in a node's diff to copy only those to this environment, as the other way. Everything else here stays as it is, and they are published here only where both sides are published without unpublished changes.
