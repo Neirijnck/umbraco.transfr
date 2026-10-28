@@ -8,6 +8,15 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 - Fields from a remote: with From chosen, tick the names and properties that differ in a node's diff to copy only those to this environment, as the other way. Everything else here stays as it is, and they are published here only where both sides are published without unpublished changes.
 
+### Changed
+
+- The dry run, its report and a node's diff (opened to pick fields) show which way the copy goes: this environment on the left and the remote on the right, as in the trees, with an arrow pointing at the side that is written to.
+- The selection bar is always shown, also with nothing picked, so the trees no longer move down at the first tick.
+
+### Fixed
+
+- The buttons under a node's diff line up.
+
 ## [17.3.0] - 2026-10-28
 
 ### Added
