@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sidesOf } from './direction.js';
+import { routeOf, sidesOf } from './direction.js';
 
 describe('sidesOf', () => {
   it('names the remote as the target when copying to it', () => {
@@ -21,6 +21,27 @@ describe('sidesOf', () => {
       target: 'This environment',
       targetNow: 'Here now',
       overwrite: 'Overwrite here: replace its version here with the one on Test site B',
+    });
+  });
+});
+
+describe('routeOf', () => {
+  const here = { side: 'local', name: 'This environment', icon: 'icon-home' };
+  const remote = { side: 'remote', name: 'Test site B', icon: 'icon-cloud' };
+
+  it('keeps this environment left and points right, at the remote, when copying to it', () => {
+    expect(routeOf('ToRemote', 'Test site B')).toEqual({
+      left: { ...here, role: 'From' },
+      right: { ...remote, role: 'To' },
+      pointsLeft: false,
+    });
+  });
+
+  it('keeps this environment left and points left, at it, when copying from the remote', () => {
+    expect(routeOf('FromRemote', 'Test site B')).toEqual({
+      left: { ...here, role: 'To' },
+      right: { ...remote, role: 'From' },
+      pointsLeft: true,
     });
   });
 });
