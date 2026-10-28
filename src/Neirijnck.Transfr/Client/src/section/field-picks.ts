@@ -4,6 +4,8 @@ import type {
   FieldDiffResponseModel,
   PropertyDiffResponseModel,
 } from '../api/index.js';
+import { sidesOf } from './direction.js';
+import type { Direction } from './direction.js';
 
 /** One field picked in a node's diff for a field-level copy. */
 export type FieldPick = FieldChoiceRequestModel;
@@ -79,4 +81,9 @@ export function batchButtonLabel(before: number, now: number): string {
     return now === 0 ? 'Add to the batch' : `Add ${fields(now)} to the batch`;
   }
   return now === 0 ? 'Remove from the batch' : `Keep ${fields(now)} in the batch`;
+}
+
+/** The accessible name of a field's tick: which field goes which way. */
+export function pickLabel(label: string, direction: Direction, remoteName: string): string {
+  return `Copy ${label} ${sidesOf(direction, remoteName).way}`;
 }

@@ -4,7 +4,7 @@
 
 Content compare for Umbraco 17 and 18: compare the content and media trees of two environments side by side, see a field-level diff per node or media item, and copy nodes and media from one environment to another, key-preserving and always via a dry run first.
 
-> Copying works both ways: from this environment to a remote (whole nodes or only some of their fields, with the media they use) and from a remote to this environment (whole nodes and media). Try it on environments you can restore first.
+> Copying works both ways, from this environment to a remote and from a remote to this environment: whole nodes or only some of their fields, with the media they use. Try it on environments you can restore first.
 
 - NuGet: `Neirijnck.Transfr`
 - Umbraco: 18.1.0 and later 18.x with Transfr 18.x, or 17.7.0 and later 17.x with Transfr 17.x; the remote too, on the same Umbraco major
@@ -113,7 +113,7 @@ This environment's content tree next to a remote's, compared by key one level at
 
 - A node whose document type is missing or different on the other side is greyed out with the reason.
 - Choose which way to copy above the trees: **To** the remote, or **From** the remote to this environment (shown where copying from a remote is allowed). Tick nodes in the tree you copy from, each on its own or with everything below it. The selection holds the media picked in the Media view too, stays in view while you scroll, and is kept per browser tab, remote and direction until a transfer completes.
-- To copy only some fields of a node to the remote, tick the names and properties that differ in its diff and add them to the selection. A block list or grid is one field. Only those fields are written; everything else on the remote stays as it is. They are published only where both sides are published without unpublished changes, so nobody's draft goes live; otherwise they are saved as a draft there. A node ticked whole in the tree is copied whole.
+- To copy only some fields of a node, either way, tick the names and properties that differ in its diff and add them to the selection. A block list or grid is one field. Only those fields are written; everything else on the side being written to stays as it is. They are published only where both sides are published without unpublished changes, so nobody's draft goes live; otherwise they are saved as a draft there. A node ticked whole in the tree is copied whole.
 - **Dry run** shows per node what the copy would do: create, update, leave unchanged, skip as a conflict (with who last changed it on the side being written to, and when), or refuse with the reason; which cultures it would publish, and when and by whom it was last copied, either way. The media a node uses get rows of their own: created with their folders when the side being written to lacks them, updated when they changed, skipped as a conflict when they changed there. A missing parent or linked page can be added to the selection from there. A dry run reads both sides and changes nothing.
 - Tick **Overwrite** on a conflict to replace that version anyway, and choose **Transfer** to carry out exactly that dry run. The report shows per node what happened.
 
@@ -133,7 +133,7 @@ The remotes, with a connection test per remote, and the form to connect one at r
 
 ## Current limitations
 
-- Fields can only be copied to the remote, and only to a node it has already. A copy from the remote takes whole nodes.
+- Fields can only be copied to a node the side being written to has already.
 - A media item is compared by its data, not by its file: a file replaced by another with the same name, size and dimensions shows as unchanged.
 - A media file is copied from the remote only when the remote serves it publicly at `/media/<folder>/<file>`; while it is copied, it is held in memory.
 - A node that references a member can't be copied: members are never copied.
@@ -144,7 +144,6 @@ The remotes, with a connection test per remote, and the form to connect one at r
 
 Planned, not in this version:
 
-- **Fields from a remote**: copy only some fields of a node from a remote to this environment.
 - **Compare with…**: an action on a content node that opens the compare at that branch.
 
 ## Repository layout

@@ -6,6 +6,7 @@ import {
   describeFields,
   hasPick,
   nameField,
+  pickLabel,
   propertyField,
   samePicks,
   togglePick,
@@ -92,5 +93,10 @@ describe('field picks', () => {
     [2, 1, 'Keep 1 field in the batch'],
   ])('labels the batch button from %i to %i fields', (before, now, expected) => {
     expect(batchButtonLabel(before, now)).toBe(expected);
+  });
+
+  it('names the way a picked field goes', () => {
+    expect(pickLabel('Title', 'ToRemote', 'Test site B')).toBe('Copy Title to Test site B');
+    expect(pickLabel('Title', 'FromRemote', 'Test site B')).toBe('Copy Title from Test site B');
   });
 });
