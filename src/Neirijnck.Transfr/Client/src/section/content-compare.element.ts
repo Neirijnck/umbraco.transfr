@@ -342,12 +342,13 @@ export class TransfrContentCompareElement extends UmbLitElement {
         key: row.key,
         name: row.local?.name ?? row.remote?.name ?? row.key,
         kind: this.kind,
-        // Media are copied whole, and a copy from the remote takes whole nodes: no fields to pick then.
+        // Media are copied whole: no fields to pick for them.
         batch:
-          canCopy && this.kind === 'Document' && this._direction === 'ToRemote'
+          canCopy && this.kind === 'Document'
             ? {
                 whole: coveredBy !== undefined || isWhole(pick),
                 fields: pick !== undefined && !isWhole(pick) ? [...pick] : [],
+                direction: this._direction,
               }
             : undefined,
       },

@@ -1,5 +1,6 @@
 import { UmbModalToken } from '@umbraco-cms/backoffice/modal';
 import type { FieldChoiceRequestModel } from '../api/index.js';
+import type { Direction } from './direction.js';
 
 export type TransfrNodeDiffModalData = {
   /** The remote to compare with. */
@@ -13,9 +14,10 @@ export type TransfrNodeDiffModalData = {
   name: string;
   /**
    * The node in the batch, when fields can be picked for it (from the compare tree, for a node that can be copied):
-   * whole (then its fields all come along already) or the fields picked so far. Absent = only the diff, read-only.
+   * whole (then its fields all come along already) or the fields picked so far, and the way the batch copies them.
+   * Absent = only the diff, read-only.
    */
-  batch?: { whole: boolean; fields: Array<FieldChoiceRequestModel> };
+  batch?: { whole: boolean; fields: Array<FieldChoiceRequestModel>; direction: Direction };
 };
 
 export type TransfrNodeDiffModalValue = {

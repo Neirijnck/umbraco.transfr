@@ -15,6 +15,7 @@ import {
   batchHint,
   hasPick,
   nameField,
+  pickLabel,
   propertyField,
   samePicks,
   togglePick,
@@ -138,7 +139,7 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
     return html`<input
       type="checkbox"
       class="pick"
-      aria-label=${`Copy ${label} to ${this.data?.remoteName ?? 'the remote'}`}
+      aria-label=${pickLabel(label, this.data?.batch?.direction ?? 'ToRemote', this.data?.remoteName ?? 'the remote')}
       title=${picked ? `${label} goes to the batch` : `Pick ${label} for a field-level copy`}
       .checked=${picked}
       @change=${() => (this._picks = togglePick(this._picks, pick))}
