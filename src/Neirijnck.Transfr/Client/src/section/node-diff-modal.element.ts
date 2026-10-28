@@ -98,7 +98,7 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
     return html`
       <umb-body-layout headline=${`${name}: this environment and ${remote}`}>
         ${this.#renderBody(remote)}
-        <div slot="actions">${this.#renderActions()}</div>
+        <div slot="actions" class="actions">${this.#renderActions()}</div>
       </umb-body-layout>
     `;
   }
@@ -460,6 +460,14 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
       .row.differs {
         border-left-color: var(--uui-color-selected);
         background: color-mix(in srgb, var(--uui-color-selected) 6%, var(--uui-color-surface));
+      }
+
+      /* A row of equal-height buttons: the batch button's icon makes it taller, which on the text baseline left Close
+         lower. */
+      .actions {
+        display: flex;
+        align-items: stretch;
+        gap: var(--uui-size-space-2);
       }
 
       .hint {
