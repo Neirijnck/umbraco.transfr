@@ -23,6 +23,7 @@ import {
 import type { FieldPick } from './field-picks.js';
 import type { TransfrNodeDiffModalData, TransfrNodeDiffModalValue } from './node-diff-modal.token.js';
 import { problemMessage } from './problem.js';
+import { renderRoute, routeStyles } from './route.js';
 import { diffWords } from './text-diff.js';
 import type { DiffSegment } from './text-diff.js';
 
@@ -97,8 +98,8 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
     const remote = this.data?.remoteName ?? 'the remote';
     return html`
       <umb-body-layout headline=${`${name}: this environment and ${remote}`}>
-        ${this.#renderBody(remote)}
-        <div slot="actions">${this.#renderActions()}</div>
+        ${this.data?.batch ? renderRoute(this.data.batch.direction, remote) : nothing} ${this.#renderBody(remote)}
+        <div slot="actions" class="actions">${this.#renderActions()}</div>
       </umb-body-layout>
     `;
   }
@@ -363,6 +364,7 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
 
   static override styles = [
     brandStyles,
+    routeStyles,
     css`
       .toolbar {
         display: flex;
@@ -460,6 +462,14 @@ export class TransfrNodeDiffModalElement extends UmbModalBaseElement<
       .row.differs {
         border-left-color: var(--uui-color-selected);
         background: color-mix(in srgb, var(--uui-color-selected) 6%, var(--uui-color-surface));
+      }
+
+      /* A row of equal-height buttons: the batch button's icon makes it taller, which on the text baseline left Close
+         lower. */
+      .actions {
+        display: flex;
+        align-items: stretch;
+        gap: var(--uui-size-space-2);
       }
 
       .hint {

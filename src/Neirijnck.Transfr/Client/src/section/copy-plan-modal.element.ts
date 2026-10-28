@@ -24,6 +24,7 @@ import {
   outcomeLook,
 } from './plan-view.js';
 import { problemMessage } from './problem.js';
+import { renderRoute, routeStyles } from './route.js';
 import { describeSchemaProblem, describeSeparateInstall } from './schema-view.js';
 import { EMPTY_BATCH, addToSelection, batchFromRequest, batchToRequest, describeBatch } from './selection.js';
 import type { Batch } from './selection.js';
@@ -171,6 +172,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
     const { way } = sidesOf(this.#direction, remote);
     return html`
       <umb-body-layout headline=${this._transfer ? `Transfer ${way}` : `Dry run: copy ${way}`}>
+        ${renderRoute(this.#direction, remote)}
         ${
           this._transfer
             ? this.#renderReport(this._transfer, remote)
@@ -413,6 +415,7 @@ export class TransfrCopyPlanModalElement extends UmbModalBaseElement<
 
   static override styles = [
     brandStyles,
+    routeStyles,
     css`
       .intro,
       .notice {

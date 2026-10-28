@@ -36,3 +36,29 @@ export function sidesOf(direction: Direction, remoteName: string): Sides {
         overwrite: `Overwrite on ${remoteName}: replace its version there with this one`,
       };
 }
+
+/** One end of a copy's route, drawn with its side's icon and colour (as the trees' pane heads). */
+export type RouteEnd = {
+  readonly side: 'local' | 'remote';
+  readonly name: string;
+  readonly icon: string;
+  /** Whether the copy reads (From) or writes (To) there. */
+  readonly role: 'From' | 'To';
+};
+
+/** A copy's route as drawn: this environment left and the remote right, as in the trees; the arrow points at the target. */
+export type Route = {
+  readonly left: RouteEnd;
+  readonly right: RouteEnd;
+  readonly pointsLeft: boolean;
+};
+
+export function routeOf(direction: Direction, remoteName: string): Route {
+  const fromRemote = direction === 'FromRemote';
+  const route: Route = {
+    left: { side: 'local', name: 'This environment', icon: 'icon-home', role: fromRemote ? 'To' : 'From' },
+    right: { side: 'remote', name: remoteName, icon: 'icon-cloud', role: fromRemote ? 'From' : 'To' },
+    pointsLeft: fromRemote,
+  };
+  return route;
+}
