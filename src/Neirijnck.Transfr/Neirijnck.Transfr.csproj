@@ -13,7 +13,7 @@
     <Product>Transfr</Product>
     <Title>Transfr</Title>
     <Description>Compare Umbraco content and media trees between environments side by side and copy nodes and media either way, key-preserving, with a mandatory dry run.</Description>
-    <VersionPrefix>18.3.0</VersionPrefix>
+    <VersionPrefix>18.3.1</VersionPrefix>
     <Authors>Preben Neirijnck</Authors>
     <Copyright>Preben Neirijnck</Copyright>
     <PackageTags>umbraco umbraco-marketplace content compare diff sync transfer</PackageTags>
