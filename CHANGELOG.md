@@ -17,6 +17,10 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 - The buttons under a node's diff line up.
 
+## [17.3.1] - 2026-10-28
+
+The same changes as 18.3.1, for Umbraco 17.
+
 ## [18.3.0] - 2026-10-28
 
 ### Added
