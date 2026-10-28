@@ -14,6 +14,10 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 - A conflict now means that the side being written to changed since the last copy in either direction: after a copy to the remote and a later change there, copying it back here is an update as long as nothing changed here, and the other way round. The copy history keeps both sides' update times for this (a column is added to `transfrCopyHistory` on upgrade); copies recorded before count only for the direction they went.
 - A remote installed separately is also recognised from its own side (a document type there whose alias is here under another key), so copying from it is refused as a whole too.
 
+## [17.3.0] - 2026-10-28
+
+The same changes as 18.3.0, for Umbraco 17.
+
 ## [18.2.0] - 2026-10-21
 
 ### Added
