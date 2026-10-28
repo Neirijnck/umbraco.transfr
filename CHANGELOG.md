@@ -4,6 +4,8 @@ From 17.0.0 on, Transfr's major version is the Umbraco major it supports: 17.x f
 
 ## [Unreleased]
 
+## [18.3.0] - 2026-10-28
+
 ### Added
 
 - Copying from a remote to this environment. A To/From switch above the trees in the Content and Media views picks the way; tick nodes and media items in the remote's tree, and the dry run and the transfer work as they do the other way. The copy writes here as you, through Umbraco's own editing services, and needs your user's permissions on every node and media item it writes. Media files are downloaded from the remote's public media path. It is allowed in the Development and Local environments, elsewhere only when `Transfr:AllowPull` is true. Fields can still only be copied to the remote.
